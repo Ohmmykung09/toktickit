@@ -13,6 +13,7 @@
     "test": "npm --workspace client test -- --run && npm --workspace server test -- --run",
     "test:client": "npm --workspace client test -- --run",
     "test:server": "npm --workspace server test -- --run",
+    "db:check": "npm --workspace server run db:check",
     "prisma:generate": "npm --workspace server run prisma:generate"
   }
 }

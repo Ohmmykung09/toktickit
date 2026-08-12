@@ -51,6 +51,18 @@ Generate the Prisma client:
 npm run prisma:generate
 ```
 
+Check that PostgreSQL is reachable with the configured `DATABASE_URL`:
+
+```powershell
+npm run db:check
+```
+
+Expected success output:
+
+```text
+PostgreSQL connection check passed.
+```
+
 ## Development
 
 Run the frontend:
@@ -63,6 +75,13 @@ Run the backend:
 
 ```powershell
 npm run dev:server
+```
+
+Build and run the compiled backend:
+
+```powershell
+npm run build --workspace server
+npm start --workspace server
 ```
 
 ## Tests
