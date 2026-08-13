@@ -77,6 +77,21 @@ Run the backend:
 npm run dev:server
 ```
 
+Health check endpoint:
+
+```text
+GET http://localhost:3000/api/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "service": "TokTickIT API"
+}
+```
+
 Build and run the compiled backend:
 
 ```powershell
