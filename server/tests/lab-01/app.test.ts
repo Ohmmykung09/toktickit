@@ -1,6 +1,11 @@
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
+import { prisma } from '../../src/db.js';
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
 
 describe('TokTickIT API foundation', () => {
   it('starts the Express app and returns a root response', async () => {
@@ -21,5 +26,17 @@ describe('TokTickIT API foundation', () => {
       status: 'ok',
       service: 'TokTickIT API'
     });
+  });
+
+  it('returns the seeded request categories', async () => {
+    const response = await request(app).get('/api/categories');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      { id: expect.any(Number), name: 'Account and Access' },
+      { id: expect.any(Number), name: 'Hardware' },
+      { id: expect.any(Number), name: 'Software' },
+      { id: expect.any(Number), name: 'Network' }
+    ]);
   });
 });

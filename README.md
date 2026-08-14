@@ -126,6 +126,23 @@ Expected response:
 }
 ```
 
+Category list endpoint:
+
+```text
+GET http://localhost:3000/api/categories
+```
+
+Expected response:
+
+```json
+[
+  { "id": 1, "name": "Account and Access" },
+  { "id": 2, "name": "Hardware" },
+  { "id": 3, "name": "Software" },
+  { "id": 4, "name": "Network" }
+]
+```
+
 Build and run the compiled backend:
 
 ```powershell
