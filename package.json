@@ -14,6 +14,8 @@
     "test:client": "npm --workspace client test -- --run",
     "test:server": "npm --workspace server test -- --run",
     "db:check": "npm --workspace server run db:check",
-    "prisma:generate": "npm --workspace server run prisma:generate"
+    "prisma:generate": "npm --workspace server run prisma:generate",
+    "prisma:migrate": "npm --workspace server run prisma:migrate",
+    "prisma:seed": "npm --workspace server run prisma:seed"
   }
 }

@@ -76,6 +76,27 @@ Expected success output:
 PostgreSQL connection check passed.
 ```
 
+Create or update the local database schema:
+
+```powershell
+npm run prisma:migrate
+```
+
+Seed the Lab 1 request categories:
+
+```powershell
+npm run prisma:seed
+```
+
+The seed is safe to run more than once and inserts these categories when missing:
+
+```text
+Account and Access
+Hardware
+Software
+Network
+```
+
 ## Development
 
 Run the frontend:
