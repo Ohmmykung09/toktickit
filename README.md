@@ -7,6 +7,7 @@ TokTickIT is the Lab 1 full-stack starter for CPE 334. This branch sets up the p
 ```text
 toktickit/
 ├── client/
+│   └── .env.example
 ├── server/
 │   ├── prisma/
 │   ├── src/
@@ -33,7 +34,7 @@ Install all workspace dependencies:
 npm install
 ```
 
-Copy the environment template and set your local PostgreSQL connection string:
+Copy the backend environment template and set your local PostgreSQL connection string:
 
 ```powershell
 Copy-Item .env.example server/.env
@@ -43,6 +44,18 @@ Example `DATABASE_URL`:
 
 ```text
 postgresql://postgres:postgres@localhost:5432/toktickit?schema=public
+```
+
+Copy the frontend environment template so Vite can load the API base URL:
+
+```powershell
+Copy-Item client/.env.example client/.env
+```
+
+Example `VITE_API_BASE_URL`:
+
+```text
+http://localhost:3000
 ```
 
 Generate the Prisma client:
@@ -75,6 +88,21 @@ Run the backend:
 
 ```powershell
 npm run dev:server
+```
+
+Health check endpoint:
+
+```text
+GET http://localhost:3000/api/health
+```
+
+Expected response:
+
+```json
+{
+  "status": "ok",
+  "service": "TokTickIT API"
+}
 ```
 
 Build and run the compiled backend:

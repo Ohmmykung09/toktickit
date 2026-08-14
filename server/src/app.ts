@@ -11,6 +11,13 @@ app.use(
 );
 app.use(express.json());
 
+app.get('/api/health', (_request, response) => {
+  response.status(200).json({
+    status: 'ok',
+    service: 'TokTickIT API'
+  });
+});
+
 app.get('/', (_request, response) => {
   response.status(200).json({
     service: 'TokTickIT API',

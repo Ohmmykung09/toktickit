@@ -12,4 +12,14 @@ describe('TokTickIT API foundation', () => {
       message: 'Project foundation is running'
     });
   });
+
+  it('returns the health check status', async () => {
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: 'ok',
+      service: 'TokTickIT API'
+    });
+  });
 });
