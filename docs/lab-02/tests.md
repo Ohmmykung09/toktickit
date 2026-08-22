@@ -7,7 +7,7 @@ This table is created before implementation. The Actual Status column is updated
 | UNIT-01 | AC-02, BR-01 | Unit | `server/tests/lab-02/ticket-number.test.ts` | Ticket Number generator produces unique, correctly formatted values. | Planned |
 | UNIT-02 | AC-02, BR-07, BR-08 | Unit | `server/tests/lab-02/ticket-validation.test.ts` | Ticket input validator rejects missing, too short, too long, and invalid priority values. | Planned |
 | UNIT-03 | AC-04, BR-09, BR-10 | Unit | `server/tests/lab-02/attachment-validation.test.ts` | Attachment validator checks extension, MIME type, size, and active-file count. | Planned |
-| API-01 | AC-01, BR-03, BR-04 | API | `server/tests/lab-02/development-requesters.api.test.ts` | Active requesters are returned and inactive requesters are excluded. | Planned |
+| API-01 | AC-01, BR-03, BR-04 | API | `server/tests/lab-02/lookups.api.test.ts` | Active requesters are returned, inactive requesters are excluded, and active related systems are returned in name order. | Passed |
 | API-02 | AC-02, BR-01, BR-02, BR-05 to BR-08 | API | `server/tests/lab-02/create-ticket.api.test.ts` | Valid ticket creation returns 201, a generated Ticket Number, status New, and requester ownership. | Planned |
 | API-03 | AC-02, BR-07, BR-08, BR-12 | API | `server/tests/lab-02/create-ticket.api.test.ts` | Invalid fields, inactive requester, and invalid lookup values return safe errors. | Planned |
 | API-04 | AC-03, BR-05 | API | `server/tests/lab-02/my-tickets.api.test.ts` | List returns only selected requester's tickets and rejects invalid paging/filter parameters. | Planned |

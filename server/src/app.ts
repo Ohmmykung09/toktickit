@@ -22,6 +22,7 @@ app.get('/api/health', (_request, response) => {
 app.get('/api/categories', async (_request, response, next) => {
   try {
     const categories = await prisma.category.findMany({
+      where: { isActive: true },
       orderBy: {
         id: 'asc'
       },
@@ -32,6 +33,34 @@ app.get('/api/categories', async (_request, response, next) => {
     });
 
     response.status(200).json(categories);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/related-systems', async (_request, response, next) => {
+  try {
+    const relatedSystems = await prisma.relatedSystem.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true }
+    });
+
+    response.status(200).json(relatedSystems);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/development-requesters', async (_request, response, next) => {
+  try {
+    const requesters = await prisma.developmentRequester.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true }
+    });
+
+    response.status(200).json(requesters);
   } catch (error) {
     next(error);
   }
