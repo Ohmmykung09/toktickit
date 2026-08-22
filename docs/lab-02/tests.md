@@ -13,6 +13,7 @@ This table is created before implementation. The Actual Status column is updated
 | API-04 | AC-03, BR-05 | API | `server/tests/lab-02/my-tickets.api.test.ts` | List returns only selected requester's tickets and rejects invalid paging/filter parameters. | Planned |
 | API-05 | AC-03 | API | `server/tests/lab-02/ticket-detail.api.test.ts` | Owner can retrieve a ticket; another requester receives a safe ownership failure. | Planned |
 | API-06 | AC-04, BR-09 to BR-11 | API | `server/tests/lab-02/attachments.api.test.ts` | Upload, download, count limit, invalid file, ownership, and soft removal behaviour are verified. | Planned |
+| API-07 | AC-02, BR-12 | API | `server/tests/lab-02/create-ticket.api.test.ts` | Repeating an identical create request with the same `Idempotency-Key` returns the original ticket and creates only one record; reusing that key with different ticket data returns `409`. | Planned |
 | UI-01 | AC-01 | UI component | `client/tests/lab-02/RequesterSelection.test.tsx` | Selector renders loading, successful selection, empty, and API failure states. | Planned |
 | UI-02 | AC-02, BR-12, BR-13 | UI component | `client/tests/lab-02/CreateTicket.test.tsx` | Form renders lookup data, validation errors, busy submit, success Ticket Number, and retained data after failure. | Planned |
 | UI-03 | AC-03 | UI component | `client/tests/lab-02/MyTickets.test.tsx` | List displays API results rather than hard-coded data, plus empty, no-result, error, and pagination states. | Planned |

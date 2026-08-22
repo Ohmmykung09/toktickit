@@ -5,7 +5,7 @@
 - Base URL during local development: `http://localhost:3000`.
 - Request and response bodies use JSON except file uploads, which use `multipart/form-data`.
 - Lab 2 requester context is supplied with the `X-Development-Requester-Id` request header. It is a temporary testing mechanism, not authentication.
-- Successful responses use `200 OK` or `201 Created`. Validation failures use `400 Bad Request`; missing records use `404 Not Found`; ownership failures use `403 Forbidden`; conflicts use `409 Conflict`; file size/type failures use `400 Bad Request`; unexpected failures use `500 Internal Server Error`.
+- Successful responses use `200 OK` or `201 Created`. Validation failures use `400 Bad Request`; missing records use `404 Not Found`; ownership failures use `403 Forbidden`; a reused idempotency key with different ticket data uses `409 Conflict`; file size/type failures use `400 Bad Request`; unexpected failures use `500 Internal Server Error`.
 - Error response format: `{ "error": "Safe user-facing message" }`.
 
 ## 2. Lookup Endpoints
@@ -34,7 +34,12 @@ Returns active Related Systems ordered by name.
 
 Creates a ticket for the selected requester.
 
-Headers: `X-Development-Requester-Id: <integer>`
+Headers:
+
+```text
+X-Development-Requester-Id: <integer>
+Idempotency-Key: <UUID generated once for one submit action>
+```
 
 Request:
 
@@ -59,6 +64,14 @@ Response `201 Created`:
 ```
 
 The backend validates requester activity, lookup values, trimmed field lengths, and priority values. The Ticket Number and initial status are system-managed values.
+
+#### Duplicate Request Behaviour
+
+- The backend stores the `Idempotency-Key` atomically with the newly created ticket and scopes it to the selected requester.
+- The first valid request for a key returns `201 Created`.
+- A retry with the same key and identical ticket payload returns `200 OK` with the original ticket response and does not create another Ticket.
+- Reusing the same key with a different ticket payload returns `409 Conflict` with a safe error message.
+- The frontend creates one UUID per submit action and reuses it only when retrying that same action.
 
 ### GET /api/tickets
 
