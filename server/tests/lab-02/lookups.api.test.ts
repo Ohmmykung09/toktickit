@@ -12,22 +12,26 @@ describe('Lab 2 lookup APIs', () => {
     const response = await request(app).get('/api/related-systems');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.arrayContaining([
+    expect(response.body).toEqual([
       { id: expect.any(Number), name: 'Campus Wi-Fi' },
+      { id: expect.any(Number), name: 'Corporate Laptop' },
       { id: expect.any(Number), name: 'Email' },
+      { id: expect.any(Number), name: 'Grade Submission App' },
+      { id: expect.any(Number), name: 'LEB2 App' },
+      { id: expect.any(Number), name: 'Printer' },
       { id: expect.any(Number), name: 'VPN' }
-    ]));
-    expect(response.body.map((item: { name: string }) => item.name)).toEqual([...response.body.map((item: { name: string }) => item.name)].sort());
+    ]);
   });
 
   it('returns active development requesters and excludes inactive ones', async () => {
     const response = await request(app).get('/api/development-requesters');
 
     expect(response.status).toBe(200);
-    expect(response.body).toEqual(expect.arrayContaining([
+    expect(response.body).toEqual([
       { id: expect.any(Number), name: 'Aom S.' },
-      { id: expect.any(Number), name: 'Beam K.' }
-    ]));
-    expect(response.body.map((item: { name: string }) => item.name)).not.toContain('Retired Requester');
+      { id: expect.any(Number), name: 'Beam K.' },
+      { id: expect.any(Number), name: 'Mew P.' },
+      { id: expect.any(Number), name: 'Nok T.' }
+    ]);
   });
 });
