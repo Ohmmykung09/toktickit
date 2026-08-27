@@ -7,6 +7,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+const requesterResponse = () => new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 });
+
 describe('TokTickIT foundation UI', () => {
   it('renders the TokTickIT heading', () => {
     render(<App />);
@@ -27,6 +29,7 @@ describe('TokTickIT foundation UI', () => {
 
   it('displays the backend status after a successful health check', async () => {
     vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(requesterResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -81,6 +84,7 @@ describe('TokTickIT foundation UI', () => {
 
   it('displays a useful error message when the category request fails', async () => {
     vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(requesterResponse())
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -123,7 +127,9 @@ describe('TokTickIT foundation UI', () => {
   });
 
   it('shows a loading state while the system check is in progress', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(requesterResponse())
+      .mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           setTimeout(() => {
@@ -149,9 +155,9 @@ describe('TokTickIT foundation UI', () => {
   });
 
   it('displays a useful error message when the backend is unavailable', async () => {
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(
-      new Error('Backend unavailable')
-    );
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(requesterResponse())
+      .mockRejectedValueOnce(new Error('Backend unavailable'));
 
     render(<App />);
 
