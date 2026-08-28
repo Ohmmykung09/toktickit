@@ -1,5 +1,9 @@
+import { access, mkdir, unlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import cors from 'cors';
 import express from 'express';
+import multer from 'multer';
 import { Prisma, RequestedPriority, TicketStatus } from '@prisma/client';
 import { prisma } from './db.js';
 import { env } from './env.js';
@@ -10,6 +14,17 @@ import {
 } from './ticket-service.js';
 
 export const app = express();
+
+const attachmentDirectory = path.resolve(process.cwd(), 'uploads');
+const maximumAttachmentSize = 5 * 1024 * 1024;
+const permittedAttachments = new Map([
+  ['.jpg', 'image/jpeg'],
+  ['.jpeg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.webp', 'image/webp'],
+  ['.pdf', 'application/pdf']
+]);
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: maximumAttachmentSize, files: 1 } });
 
 app.use(
   cors({
@@ -148,6 +163,19 @@ function displayStatus(status: TicketStatus) {
 
 function displayPriority(priority: RequestedPriority) {
   return `${priority.charAt(0)}${priority.slice(1).toLowerCase()}`;
+}
+
+async function ownedTicket(request: express.Request, ticketNumber: string) {
+  const requesterId = await activeRequesterId(request);
+  if (!requesterId) return { requesterId: null, ticket: null };
+
+  const ticket = await prisma.ticket.findUnique({ where: { ticketNumber } });
+  if (!ticket || ticket.requesterId !== requesterId) return { requesterId, ticket: null };
+  return { requesterId, ticket };
+}
+
+function attachmentInfo(attachment: { id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: Date }) {
+  return attachment;
 }
 
 app.post('/api/tickets', async (request, response, next) => {
@@ -300,6 +328,142 @@ app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
   }
 });
 
+app.post('/api/tickets/:ticketNumber/attachments', upload.single('file'), async (request, response, next) => {
+  try {
+    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
+    if (!requesterId) {
+      response.status(400).json({ error: 'Development Requester context is invalid.' });
+      return;
+    }
+    if (!ticket) {
+      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      return;
+    }
+    if (!request.file) {
+      response.status(400).json({ error: 'Select one attachment to upload.' });
+      return;
+    }
+
+    const extension = path.extname(request.file.originalname).toLowerCase();
+    if (permittedAttachments.get(extension) !== request.file.mimetype) {
+      response.status(400).json({ error: 'Only JPG, JPEG, PNG, WEBP, and PDF attachments are permitted.' });
+      return;
+    }
+
+    const activeAttachmentCount = await prisma.attachment.count({
+      where: { ticketId: ticket.id, removedAt: null }
+    });
+    if (activeAttachmentCount >= 5) {
+      response.status(400).json({ error: 'A ticket can have at most five active attachments.' });
+      return;
+    }
+
+    const storedFileName = `${randomUUID()}${extension}`;
+    await mkdir(attachmentDirectory, { recursive: true });
+    await writeFile(path.join(attachmentDirectory, storedFileName), request.file.buffer);
+
+    try {
+      const attachment = await prisma.attachment.create({
+        data: {
+          ticketId: ticket.id,
+          originalFileName: request.file.originalname,
+          storedFileName,
+          mimeType: request.file.mimetype,
+          sizeBytes: request.file.size
+        }
+      });
+      response.status(201).json(attachmentInfo(attachment));
+    } catch (error) {
+      await unlink(path.join(attachmentDirectory, storedFileName)).catch(() => undefined);
+      throw error;
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/tickets/:ticketNumber/attachments', async (request, response, next) => {
+  try {
+    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
+    if (!requesterId) {
+      response.status(400).json({ error: 'Development Requester context is invalid.' });
+      return;
+    }
+    if (!ticket) {
+      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      return;
+    }
+
+    const attachments = await prisma.attachment.findMany({
+      where: { ticketId: ticket.id, removedAt: null },
+      orderBy: { createdAt: 'desc' }
+    });
+    response.status(200).json(attachments.map(attachmentInfo));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/tickets/:ticketNumber/attachments/:attachmentId/download', async (request, response, next) => {
+  try {
+    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
+    const attachmentId = Number(request.params.attachmentId);
+    if (!requesterId || !Number.isInteger(attachmentId) || attachmentId <= 0) {
+      response.status(400).json({ error: 'Attachment request is invalid.' });
+      return;
+    }
+    if (!ticket) {
+      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      return;
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticketId: ticket.id, removedAt: null }
+    });
+    if (!attachment) {
+      response.status(404).json({ error: 'Attachment not found.' });
+      return;
+    }
+
+    const filePath = path.join(attachmentDirectory, attachment.storedFileName);
+    await access(filePath);
+    response.download(filePath, attachment.originalFileName);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (request, response, next) => {
+  try {
+    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
+    const attachmentId = Number(request.params.attachmentId);
+    if (!requesterId || !Number.isInteger(attachmentId) || attachmentId <= 0) {
+      response.status(400).json({ error: 'Attachment request is invalid.' });
+      return;
+    }
+    if (!ticket) {
+      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      return;
+    }
+
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, ticketId: ticket.id, removedAt: null }
+    });
+    if (!attachment) {
+      response.status(404).json({ error: 'Attachment not found.' });
+      return;
+    }
+
+    await prisma.attachment.update({
+      where: { id: attachment.id },
+      data: { removedAt: new Date(), removedByRequesterId: requesterId }
+    });
+    response.status(200).json({ message: 'Attachment removed.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/', (_request, response) => {
   response.status(200).json({
     service: 'TokTickIT API',
@@ -314,6 +478,10 @@ app.use(
     response: express.Response,
     _next: express.NextFunction
   ) => {
+    if (error instanceof multer.MulterError) {
+      response.status(400).json({ error: 'Attachment must be 5 MB or smaller.' });
+      return;
+    }
     console.error(error);
     response.status(500).json({
       error: 'Unable to process the request'
