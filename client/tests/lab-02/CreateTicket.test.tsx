@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
 
 const requesterResponse = () => new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 });
+const ticketListResponse = () => new Response(JSON.stringify({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }), { status: 200 });
 const categoryResponse = () => new Response(JSON.stringify([{ id: 10, name: 'Network' }]), { status: 200 });
 const systemResponse = () => new Response(JSON.stringify([{ id: 20, name: 'Campus Wi-Fi' }]), { status: 200 });
 
@@ -31,6 +32,7 @@ describe('Create Ticket', () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' });
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(ticketListResponse())
       .mockResolvedValueOnce(categoryResponse())
       .mockResolvedValueOnce(systemResponse())
       .mockResolvedValueOnce(new Response(JSON.stringify({ ticketNumber: 'TKT-20260824-0001', status: 'New', createdAt: '2026-08-24T12:00:00.000Z' }), { status: 201 }));
@@ -46,7 +48,7 @@ describe('Create Ticket', () => {
   });
 
   it('shows adjacent validation feedback before submitting an incomplete form', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse());
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse());
     render(<App />);
 
     await openCreateTicket();
@@ -60,7 +62,7 @@ describe('Create Ticket', () => {
 
   it('retains entered values and shows a useful error after a create request fails', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Ticket service is unavailable.' }), { status: 500 }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Ticket service is unavailable.' }), { status: 500 }));
     render(<App />);
 
     await openCreateTicket();
