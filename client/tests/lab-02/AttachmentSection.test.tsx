@@ -7,8 +7,8 @@ function ticketList() {
   return { items: [{ ticketNumber: 'TKT-20260828-0002', summary: 'Upload evidence', category: { id: 1, name: 'Network' }, status: 'New', requestedPriority: 'Low', updatedAt: '2026-08-28T10:00:00.000Z' }], pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 } };
 }
 
-function ticketDetail() {
-  return { ...ticketList().items[0], description: 'A ticket detail that is long enough for the attachment test.', relatedSystem: { id: 2, name: 'Campus Wi-Fi' }, createdAt: '2026-08-28T09:00:00.000Z', attachments: [] };
+function ticketDetail(attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string }> = []) {
+  return { ...ticketList().items[0], description: 'A ticket detail that is long enough for the attachment test.', relatedSystem: { id: 2, name: 'Campus Wi-Fi' }, createdAt: '2026-08-28T09:00:00.000Z', attachments };
 }
 
 async function openAttachmentSection() {
@@ -50,5 +50,37 @@ describe('Attachment section', () => {
 
     expect(screen.getByText(/choose a jpg/i)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes an attachment when the API returns 204 No Content', async () => {
+    const attachment = { id: 7, originalFileName: 'evidence.pdf', mimeType: 'application/pdf', sizeBytes: 1200, createdAt: '2026-08-28T11:00:00.000Z' };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(ticketList()), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(ticketDetail([attachment])), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    render(<App />);
+
+    await openAttachmentSection();
+    await userEvent.click(screen.getByRole('button', { name: /^remove$/i }));
+
+    expect(await screen.findByText(/attachment removed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/evidence.pdf/i)).not.toBeInTheDocument();
+  });
+
+  it('shows a useful upload error when the server returns a non-JSON 413 response', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(ticketList()), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(ticketDetail()), { status: 200 }))
+      .mockResolvedValueOnce(new Response('<html>Payload Too Large</html>', { status: 413, headers: { 'Content-Type': 'text/html' } }));
+    render(<App />);
+
+    await openAttachmentSection();
+    await userEvent.upload(screen.getByLabelText(/attachment file/i), new File(['evidence'], 'evidence.pdf', { type: 'application/pdf' }));
+    await userEvent.click(screen.getByRole('button', { name: /^upload$/i }));
+
+    expect(await screen.findByText(/attachment is too large/i)).toBeInTheDocument();
   });
 });

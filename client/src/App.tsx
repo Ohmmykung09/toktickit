@@ -76,6 +76,18 @@ function validateTicketForm(form: TicketForm) {
   return errors;
 }
 
+async function errorMessage(response: Response, fallback: string) {
+  if (response.status === 413) return 'Attachment is too large. Maximum size is 5 MB.';
+
+  if (response.headers.get('content-type')?.includes('application/json')) {
+    const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+    if (typeof payload?.error === 'string') return payload.error;
+    if (typeof payload?.message === 'string') return payload.message;
+  }
+
+  return fallback;
+}
+
 function CreateTicketForm({ requester }: { requester: Requester }) {
   const [categories, setCategories] = useState<Lookup[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<Lookup[]>([]);
@@ -308,8 +320,9 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
       const formData = new FormData();
       formData.append('file', selectedFile);
       const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments`, { method: 'POST', headers: { 'X-Development-Requester-Id': String(requester.id) }, body: formData });
-      const payload = (await response.json()) as Attachment & { error?: string };
-      if (!response.ok || !payload.id) throw new Error(payload.error ?? 'Unable to upload attachment.');
+      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to upload attachment.'));
+      const payload = await response.json().catch(() => null) as Attachment | null;
+      if (!payload?.id) throw new Error('Unable to upload attachment.');
       setAttachments((current) => [payload, ...current]);
       setSelectedFile(null);
       if (inputRef.current) inputRef.current.value = '';
@@ -327,8 +340,7 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
     setMessage('');
     try {
       const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, { method: 'DELETE', headers: { 'X-Development-Requester-Id': String(requester.id) } });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(payload.error ?? 'Unable to remove attachment.');
+      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to remove attachment.'));
       setAttachments((current) => current.filter((item) => item.id !== attachment.id));
       setMessage('Attachment removed.');
     } catch (error) {
