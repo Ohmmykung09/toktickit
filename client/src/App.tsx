@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
@@ -43,6 +43,8 @@ type TicketDetail = TicketListItem & {
   attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string }>;
 };
 
+type Attachment = { id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string };
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
 const initialTicketForm: TicketForm = {
@@ -72,6 +74,18 @@ function validateTicketForm(form: TicketForm) {
   }
 
   return errors;
+}
+
+async function errorMessage(response: Response, fallback: string) {
+  if (response.status === 413) return 'Attachment is too large. Maximum size is 5 MB.';
+
+  if (response.headers.get('content-type')?.includes('application/json')) {
+    const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+    if (typeof payload?.error === 'string') return payload.error;
+    if (typeof payload?.message === 'string') return payload.message;
+  }
+
+  return fallback;
 }
 
 function CreateTicketForm({ requester }: { requester: Requester }) {
@@ -270,7 +284,92 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
   if (loadState === 'loading') return <p role="status">Loading ticket details...</p>;
   if (loadState === 'error' || !ticket) return <div className="alert alert-danger" role="alert">Unable to load this ticket. Check that it belongs to the selected requester.</div>;
 
-  return <section className="ticket-form-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div><dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl><section className="border-top mt-4 pt-3"><h2 className="h5">Attachments</h2><p className="text-secondary mb-0">Attachment upload and management will be available in the next step.</p></section></section>;
+  return <section className="ticket-form-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div><dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl><AttachmentSection initialAttachments={ticket.attachments} requester={requester} ticketNumber={ticket.ticketNumber} /></section>;
+}
+
+function AttachmentSection({ requester, ticketNumber, initialAttachments }: { requester: Requester; ticketNumber: string; initialAttachments: Attachment[] }) {
+  const [attachments, setAttachments] = useState(initialAttachments);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+
+  function validFile(file: File) {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    return Boolean(extension && allowedExtensions.includes(extension) && file.size <= 5 * 1024 * 1024);
+  }
+
+  async function uploadAttachment() {
+    if (!selectedFile) {
+      setMessage('Choose an attachment before uploading.');
+      return;
+    }
+    if (!validFile(selectedFile)) {
+      setMessage('Choose a JPG, JPEG, PNG, WEBP, or PDF file that is 5 MB or smaller.');
+      return;
+    }
+    if (attachments.length >= 5) {
+      setMessage('A ticket can have at most five active attachments.');
+      return;
+    }
+
+    setBusy(true);
+    setMessage('');
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments`, { method: 'POST', headers: { 'X-Development-Requester-Id': String(requester.id) }, body: formData });
+      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to upload attachment.'));
+      const payload = await response.json().catch(() => null) as Attachment | null;
+      if (!payload?.id) throw new Error('Unable to upload attachment.');
+      setAttachments((current) => [payload, ...current]);
+      setSelectedFile(null);
+      if (inputRef.current) inputRef.current.value = '';
+      setMessage('Attachment uploaded successfully.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to upload attachment.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeAttachment(attachment: Attachment) {
+    if (!window.confirm(`Remove ${attachment.originalFileName}?`)) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, { method: 'DELETE', headers: { 'X-Development-Requester-Id': String(requester.id) } });
+      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to remove attachment.'));
+      setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+      setMessage('Attachment removed.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to remove attachment.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function downloadAttachment(attachment: Attachment) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}/download`, { headers: { 'X-Development-Requester-Id': String(requester.id) } });
+      if (!response.ok) throw new Error('Unable to download attachment.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = attachment.originalFileName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to download attachment.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="border-top mt-4 pt-3"><h2 className="h5">Attachments</h2><p className="small text-secondary">JPG, JPEG, PNG, WEBP, or PDF. Maximum 5 MB each and 5 active files per ticket.</p><div className="input-group"><input accept=".jpg,.jpeg,.png,.webp,.pdf" aria-label="Attachment file" className="form-control" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} ref={inputRef} type="file" /><button className="btn btn-success" disabled={busy} onClick={uploadAttachment} type="button">Upload</button></div>{message && <p className="mt-2 mb-0" role="status">{message}</p>}<ul className="list-group list-group-flush mt-3">{attachments.map((attachment) => <li className="list-group-item px-0 d-flex flex-wrap gap-2 justify-content-between align-items-center" key={attachment.id}><span>{attachment.originalFileName} <span className="text-secondary small">({Math.ceil(attachment.sizeBytes / 1024)} KB)</span></span><span className="btn-group"><button className="btn btn-outline-success btn-sm" disabled={busy} onClick={() => downloadAttachment(attachment)} type="button">Download</button><button className="btn btn-outline-danger btn-sm" disabled={busy} onClick={() => removeAttachment(attachment)} type="button">Remove</button></span></li>)}</ul>{attachments.length === 0 && <p className="text-secondary small mt-3 mb-0">No active attachments.</p>}</section>;
 }
 
 export function App() {
