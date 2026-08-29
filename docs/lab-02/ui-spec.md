@@ -57,3 +57,14 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 - Tablet: controls remain comfortably tappable; tables may use responsive stacking or horizontal scrolling where necessary.
 - Mobile: primary actions remain visible, controls fill available width, and ticket information stacks vertically.
 - Every interactive control has an accessible name. Keyboard focus is visible. Status messages use text as well as color.
+
+## 8. Visual Inspection Checklist
+
+The final inspection is performed on `main` at desktop (1440 x 900), tablet (768 x 1024), and mobile (390 x 844) viewports. Screenshots are stored under `artifacts/lab-02/screenshots/`.
+
+- Zen Green primary actions, secondary actions, destructive actions, and disabled/busy controls remain visually distinct.
+- Editable fields, system-generated/read-only values, required markers, and adjacent validation messages are visible.
+- Requester context and active navigation remain visible on every required screen.
+- Create Ticket, My Tickets, Ticket Detail, and Attachment controls have no clipped text, overlap, or unexpected horizontal page overflow.
+- Ticket list filters, sort control, pagination, attachment action buttons, and error/empty/no-result states remain usable at each viewport.
+- Keyboard focus and text status/error messages make state understandable without relying only on color.

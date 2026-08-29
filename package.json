@@ -17,5 +17,8 @@
     "prisma:generate": "npm --workspace server run prisma:generate",
     "prisma:migrate": "npm --workspace server run prisma:migrate",
     "prisma:seed": "npm --workspace server run prisma:seed"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
   }
 }

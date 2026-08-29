@@ -108,4 +108,17 @@ The Development Requester selector is a testing context for Lab 2. It is not rea
 
 ## 7. Definition of Done
 
-A Lab 2 feature is done when its acceptance criteria are implemented, documented, and covered by appropriate automated tests. The feature must be developed on its feature branch, reviewed through a Pull Request into `lab2-staging`, and have any review comments resolved. The final release is complete only when all Lab 2 features, documentation, responsive evidence, test evidence, and release PR into `main` are complete.
+### Product Completion
+
+- The Development Requester, Create Ticket, My Tickets, Ticket Detail, and Attachment workflows meet AC-01 through AC-05 without adding excluded authentication, IT Staff, or ticket-lifecycle scope.
+- Backend validation, ownership checks, idempotency, safe errors, migration, and seed data conform to this specification and `api-spec.md`.
+- Unit, API, and UI tests pass with every acceptance criterion linked to actual test evidence in `tests.md`; no test is skipped, disabled, or unrelated to the stated behaviour.
+- The requester UI conforms to `ui-spec.md`, including loading, empty, validation, success, error, attachment, and responsive states.
+- README setup, environment, database, seed, test, build, and local-run instructions are current.
+
+### Course Delivery Completion
+
+- Each increment is developed on its feature branch, reviewed through a Pull Request, and review feedback is resolved on that branch before integration.
+- The integrated `lab2-staging` branch passes the documented verification commands and browser E2E flow.
+- Responsive and visual checks are recorded with readable desktop, tablet, and mobile screenshots from the final `main` branch.
+- `docs/lab-02/reviewer.md` and `docs/lab-02/ai-use.md` are complete, and the release Pull Request from `lab2-staging` to `main` is peer reviewed before merge.

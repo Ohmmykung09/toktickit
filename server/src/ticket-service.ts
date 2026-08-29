@@ -23,7 +23,7 @@ type TicketRecord = {
 
 export class IdempotencyConflictError extends Error {}
 
-function ticketPrefix(date: Date) {
+export function ticketNumberPrefix(date: Date) {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
@@ -68,7 +68,7 @@ export async function createTicket(
         return { created: false, ticket: ticketResponse(existing) };
       }
 
-      const prefix = ticketPrefix(new Date());
+      const prefix = ticketNumberPrefix(new Date());
       const latestTicket = await transaction.ticket.findFirst({
         where: { ticketNumber: { startsWith: prefix } },
         orderBy: { ticketNumber: 'desc' },
