@@ -175,7 +175,8 @@ async function ownedTicket(request: express.Request, ticketNumber: string) {
 }
 
 function attachmentInfo(attachment: { id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: Date }) {
-  return attachment;
+  const { id, originalFileName, mimeType, sizeBytes, createdAt } = attachment;
+  return { id, originalFileName, mimeType, sizeBytes, createdAt };
 }
 
 app.post('/api/tickets', async (request, response, next) => {

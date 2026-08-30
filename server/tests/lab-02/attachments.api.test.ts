@@ -42,7 +42,13 @@ describe('Lab 2 attachment APIs', () => {
     const uploaded = await upload(ticket.ticketNumber, requester.id);
 
     expect(uploaded.status).toBe(201);
-    expect(uploaded.body).toEqual(expect.objectContaining({ originalFileName: 'evidence.pdf', mimeType: 'application/pdf', sizeBytes: expect.any(Number) }));
+    expect(uploaded.body).toEqual({
+      id: expect.any(Number),
+      originalFileName: 'evidence.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: expect.any(Number),
+      createdAt: expect.any(String)
+    });
 
     const listed = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
     const downloaded = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
@@ -50,7 +56,13 @@ describe('Lab 2 attachment APIs', () => {
     const listedAfterRemoval = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
 
     expect(listed.status).toBe(200);
-    expect(listed.body).toEqual([expect.objectContaining({ id: uploaded.body.id, originalFileName: 'evidence.pdf' })]);
+    expect(listed.body).toEqual([{
+      id: uploaded.body.id,
+      originalFileName: 'evidence.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: expect.any(Number),
+      createdAt: expect.any(String)
+    }]);
     expect(downloaded.status).toBe(200);
     expect(removed.status).toBe(200);
     expect(listedAfterRemoval.body).toEqual([]);
