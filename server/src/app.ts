@@ -138,10 +138,10 @@ async function activeRequesterId(request: express.Request) {
   return requester?.id ?? null;
 }
 
-function pageValue(value: unknown, defaultValue: number, maximum: number) {
+function pageValue(value: unknown, defaultValue: number, maximum: number, minimum = 1) {
   if (value === undefined) return defaultValue;
   const number = Number(value);
-  return Number.isInteger(number) && number > 0 && number <= maximum ? number : null;
+  return Number.isInteger(number) && number >= minimum && number <= maximum ? number : null;
 }
 
 function requestedPriority(value: unknown) {
@@ -174,9 +174,25 @@ async function ownedTicket(request: express.Request, ticketNumber: string) {
   return { requesterId, ticket };
 }
 
-function attachmentInfo(attachment: { id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: Date }) {
-  const { id, originalFileName, mimeType, sizeBytes, createdAt } = attachment;
-  return { id, originalFileName, mimeType, sizeBytes, createdAt };
+function attachmentInfo(attachment: {
+  id: number;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: Date;
+  removedAt: Date | null;
+  removalReason: string | null;
+}) {
+  const { id, originalFileName, mimeType, sizeBytes, createdAt, removedAt, removalReason } = attachment;
+  return { id, originalFileName, mimeType, sizeBytes, createdAt, removedAt, removalReason };
+}
+
+function removalReasonFrom(body: unknown) {
+  if (!body || typeof body !== 'object') return null;
+  const reason = typeof (body as Record<string, unknown>).reason === 'string'
+    ? String((body as Record<string, unknown>).reason).trim()
+    : '';
+  return reason.length >= 3 && reason.length <= 500 ? reason : null;
 }
 
 app.post('/api/tickets', async (request, response, next) => {
@@ -226,7 +242,7 @@ app.get('/api/tickets', async (request, response, next) => {
   try {
     const requesterId = await activeRequesterId(request);
     const page = pageValue(request.query.page, 1, Number.MAX_SAFE_INTEGER);
-    const pageSize = pageValue(request.query.pageSize, 10, 50);
+    const pageSize = pageValue(request.query.pageSize, 10, 50, 5);
     const categoryId = request.query.categoryId === undefined ? undefined : Number(request.query.categoryId);
     const status = ticketStatus(request.query.status);
     const priority = requestedPriority(request.query.priority);
@@ -300,7 +316,7 @@ app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
       include: {
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
-        attachments: { where: { removedAt: null }, orderBy: { createdAt: 'desc' } }
+        attachments: { orderBy: { createdAt: 'desc' } }
       }
     });
     if (!ticket) {
@@ -322,7 +338,7 @@ app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
       updatedAt: ticket.updatedAt,
       category: ticket.category,
       relatedSystem: ticket.relatedSystem,
-      attachments: ticket.attachments.map(({ id, originalFileName, mimeType, sizeBytes, createdAt }) => ({ id, originalFileName, mimeType, sizeBytes, createdAt }))
+      attachments: ticket.attachments.map(attachmentInfo)
     });
   } catch (error) {
     next(error);
@@ -396,7 +412,7 @@ app.get('/api/tickets/:ticketNumber/attachments', async (request, response, next
     }
 
     const attachments = await prisma.attachment.findMany({
-      where: { ticketId: ticket.id, removedAt: null },
+      where: { ticketId: ticket.id },
       orderBy: { createdAt: 'desc' }
     });
     response.status(200).json(attachments.map(attachmentInfo));
@@ -438,8 +454,13 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
   try {
     const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
     const attachmentId = Number(request.params.attachmentId);
+    const removalReason = removalReasonFrom(request.body);
     if (!requesterId || !Number.isInteger(attachmentId) || attachmentId <= 0) {
       response.status(400).json({ error: 'Attachment request is invalid.' });
+      return;
+    }
+    if (!removalReason) {
+      response.status(400).json({ error: 'Removal reason must contain 3 to 500 characters.' });
       return;
     }
     if (!ticket) {
@@ -455,11 +476,11 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
       return;
     }
 
-    await prisma.attachment.update({
+    const removedAttachment = await prisma.attachment.update({
       where: { id: attachment.id },
-      data: { removedAt: new Date(), removedByRequesterId: requesterId }
+      data: { removedAt: new Date(), removalReason, removedByRequesterId: requesterId }
     });
-    response.status(200).json({ message: 'Attachment removed.' });
+    response.status(200).json(attachmentInfo(removedAttachment));
   } catch (error) {
     next(error);
   }

@@ -39,7 +39,7 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 
 ## 5. My Tickets and Ticket Detail
 
-- My Tickets provides search, filters, sort control, pagination, and a Create Ticket action.
+- My Tickets provides search, category/status/priority filters, sort field and direction controls, pagination, and a Create Ticket action.
 - Each ticket row shows Ticket Number, Summary, Category, Current Status, and Last Updated.
 - Loading, empty collection, no search results, and API failure states have distinct messages.
 - Ticket Detail presents ticket information as read-only fields and has an attachment section.
@@ -48,7 +48,7 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 
 - File input states permitted types, 5 MB maximum per file, and five active attachments maximum.
 - Each uploaded attachment shows its name, type, size, and available action.
-- Remove asks for confirmation before soft removal.
+- Remove requires a reason and asks for confirmation before soft removal. The removed item remains visible with a Removed badge, timestamp, and reason, without active actions.
 - Invalid type, excessive size/count, upload failure, removal failure, and removed-file states display clear messages.
 
 ## 7. Responsive and Accessibility Requirements

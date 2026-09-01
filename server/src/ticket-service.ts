@@ -57,7 +57,9 @@ export async function createTicket(
   return prisma.$transaction(
     async (transaction) => {
       const existing = await transaction.ticket.findUnique({
-        where: { idempotencyKey }
+        where: {
+          requesterId_idempotencyKey: { requesterId, idempotencyKey }
+        }
       });
 
       if (existing) {

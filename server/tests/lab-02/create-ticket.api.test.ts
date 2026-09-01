@@ -58,19 +58,26 @@ describe('Lab 2 create ticket API', () => {
 
   it('returns the original ticket for a retry and rejects different ticket details for the same key', async () => {
     const { requester, category, relatedSystem } = await ticketContext();
+    const otherRequester = await prisma.developmentRequester.findFirstOrThrow({
+      where: { isActive: true, id: { not: requester.id } }
+    });
     const key = randomUUID();
     const ticket = validTicket(category.id, relatedSystem.id, `Printer request ${Date.now()}`);
 
     const first = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
     const retry = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
     const conflict = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send({ ...ticket, summary: 'Different printer request' });
+    const otherRequesterTicket = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(otherRequester.id)).set('Idempotency-Key', key).send(ticket);
 
     expect(first.status).toBe(201);
     expect(retry.status).toBe(200);
     expect(retry.body).toEqual(first.body);
     expect(conflict.status).toBe(409);
     expect(conflict.body.error).toMatch(/idempotency key/i);
-    expect(await prisma.ticket.count({ where: { idempotencyKey: key } })).toBe(1);
+    expect(otherRequesterTicket.status).toBe(201);
+    expect(otherRequesterTicket.body.ticketNumber).not.toBe(first.body.ticketNumber);
+    expect(await prisma.ticket.count({ where: { requesterId: requester.id, idempotencyKey: key } })).toBe(1);
+    expect(await prisma.ticket.count({ where: { idempotencyKey: key } })).toBe(2);
   });
 
   it('rejects missing requester context, inactive requesters, and invalid lookup values safely', async () => {

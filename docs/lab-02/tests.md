@@ -10,15 +10,15 @@ Lab 2 uses unit tests for pure Ticket Number behaviour, API tests for database a
 | --- | --- | --- | --- | --- | --- |
 | UNIT-01 | AC-02, BR-01, BR-02 | Unit | `server/tests/lab-02/ticket-number.test.ts` | UTC Ticket Number prefix and system-managed response fields | Passed |
 | API-01 | AC-01, BR-03, BR-04 | API | `server/tests/lab-02/lookups.api.test.ts` | Complete active Requester and Related System lists | Passed |
-| API-02 | AC-02, BR-01, BR-02, BR-06 to BR-08, BR-12 | API | `server/tests/lab-02/create-ticket.api.test.ts` | Valid creation, validation, ownership context, idempotent retry, and conflict | Passed |
-| API-03 | AC-03, BR-05 | API | `server/tests/lab-02/my-tickets.api.test.ts` | Requester-owned list, filters, pagination, and invalid query rejection | Passed |
+| API-02 | AC-02, BR-01, BR-02, BR-06 to BR-08, BR-12 | API | `server/tests/lab-02/create-ticket.api.test.ts` | Valid creation, validation, ownership context, requester-scoped idempotent retry, and conflict | Passed |
+| API-03 | AC-03, BR-05 | API | `server/tests/lab-02/my-tickets.api.test.ts` | Requester-owned list, category/status/priority filters, sort direction, page boundaries, no-result state, and invalid query rejection | Passed |
 | API-04 | AC-03, BR-05 | API | `server/tests/lab-02/ticket-detail.api.test.ts` | Owned detail response and cross-requester denial | Passed |
-| API-05 | AC-04, BR-09 to BR-11 | API | `server/tests/lab-02/attachments.api.test.ts` | Upload, list, download, file limits, ownership, and soft removal | Passed |
+| API-05 | AC-04, BR-09 to BR-11 | API | `server/tests/lab-02/attachments.api.test.ts` | Upload, list, download, file limits, ownership, removal reason, retained metadata, and blocked removed download | Passed |
 | UI-01 | AC-01, BR-03, BR-04 | UI | `client/tests/lab-02/RequesterSelection.test.tsx` | Loading, ready, empty, and backend-failure selector states | Passed |
-| UI-02 | AC-02, BR-07, BR-08, BR-12, BR-13 | UI | `client/tests/lab-02/CreateTicket.test.tsx` | Lookup values, validation, busy submit, success, and retained form data after failure | Passed |
-| UI-03 | AC-03, BR-05 | UI | `client/tests/lab-02/MyTickets.test.tsx` | API-driven ticket list/detail navigation and list failure state | Passed |
+| UI-02 | AC-02, BR-07, BR-08, BR-12, BR-13 | UI | `client/tests/lab-02/CreateTicket.test.tsx` | Lookup values, optional post-create attachment upload, validation, busy submit, success, and retained form data after failure | Passed |
+| UI-03 | AC-03, BR-05 | UI | `client/tests/lab-02/MyTickets.test.tsx` | API-driven ticket list/detail navigation, category and direction query controls, and list failure state | Passed |
 | UI-04 | AC-03, BR-05 | UI | `client/tests/lab-02/RequesterTicketDetail.test.tsx` | API-driven requester-owned detail fields and no-attachment state | Passed |
-| UI-05 | AC-04, BR-09 to BR-11, BR-13 | UI | `client/tests/lab-02/AttachmentSection.test.tsx` | Valid/invalid file selection, upload success, `204` removal, and non-JSON `413` failure | Passed |
+| UI-05 | AC-04, BR-09 to BR-11, BR-13 | UI | `client/tests/lab-02/AttachmentSection.test.tsx` | Valid/invalid file selection, upload success, reasoned `204` removal with retained metadata, and non-JSON `413` failure | Passed |
 | E2E-01 | AC-01 to AC-04 | Browser E2E | `e2e/lab-02/requester-ticket-flow.spec.ts` | Select requester, create ticket, find/open it, upload, and remove an attachment | Passed |
 
 ## Acceptance-Criterion Matrix

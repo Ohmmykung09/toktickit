@@ -9,6 +9,7 @@ describe('Requester Ticket Detail', () => {
   it('renders the selected requester ticket detail returned by the API', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 1, name: 'Network' }]), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         items: [{ ticketNumber: 'TKT-20260829-0001', summary: 'Campus Wi-Fi is unavailable', category: { id: 1, name: 'Network' }, status: 'New', requestedPriority: 'High', updatedAt: '2026-08-29T10:00:00.000Z' }],
         pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 }

@@ -40,12 +40,22 @@ type TicketDetail = TicketListItem & {
   description: string;
   relatedSystem: Lookup;
   createdAt: string;
-  attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string }>;
+  attachments: Attachment[];
 };
 
-type Attachment = { id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string };
+type Attachment = {
+  id: number;
+  originalFileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  removedAt: string | null;
+  removalReason: string | null;
+};
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+const allowedAttachmentExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+const maximumAttachmentSize = 5 * 1024 * 1024;
 
 const initialTicketForm: TicketForm = {
   categoryId: '',
@@ -88,6 +98,11 @@ async function errorMessage(response: Response, fallback: string) {
   return fallback;
 }
 
+function validAttachmentFile(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return Boolean(extension && allowedAttachmentExtensions.includes(extension) && file.size <= maximumAttachmentSize);
+}
+
 function CreateTicketForm({ requester }: { requester: Requester }) {
   const [categories, setCategories] = useState<Lookup[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<Lookup[]>([]);
@@ -98,6 +113,10 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
   const [submitError, setSubmitError] = useState('');
   const [createdTicket, setCreatedTicket] = useState<TicketResponse | null>(null);
   const [requestKey, setRequestKey] = useState('');
+  const [selectedAttachments, setSelectedAttachments] = useState<File[]>([]);
+  const [attachmentMessage, setAttachmentMessage] = useState('');
+  const [attachmentError, setAttachmentError] = useState('');
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function loadLookups() {
@@ -124,11 +143,26 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
     setErrors((current) => ({ ...current, [field]: undefined }));
   }
 
+  function chooseAttachments(files: FileList | null) {
+    const selected = Array.from(files ?? []);
+    setAttachmentMessage('');
+    if (selected.length > 5 || selected.some((file) => !validAttachmentFile(file))) {
+      setSelectedAttachments([]);
+      setAttachmentError('Choose up to five JPG, JPEG, PNG, WEBP, or PDF files that are 5 MB or smaller.');
+      if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+      return;
+    }
+    setAttachmentError('');
+    setSelectedAttachments(selected);
+  }
+
   async function submitTicket(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const validationErrors = validateTicketForm(form);
     setErrors(validationErrors);
     setSubmitError('');
+    setAttachmentError('');
+    setAttachmentMessage('');
 
     if (Object.keys(validationErrors).length > 0) return;
 
@@ -161,6 +195,32 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
       setCreatedTicket(payload as TicketResponse);
       setSubmitState('success');
       setRequestKey('');
+
+      if (selectedAttachments.length > 0) {
+        try {
+          for (const file of selectedAttachments) {
+            const formData = new FormData();
+            formData.append('file', file);
+            const attachmentResponse = await fetch(`${apiBaseUrl}/api/tickets/${payload.ticketNumber}/attachments`, {
+              method: 'POST',
+              headers: { 'X-Development-Requester-Id': String(requester.id) },
+              body: formData
+            });
+            if (!attachmentResponse.ok) {
+              setAttachmentError(await errorMessage(
+                attachmentResponse,
+                `Ticket ${payload.ticketNumber} was created, but ${file.name} could not be uploaded.`
+              ));
+              return;
+            }
+          }
+          setAttachmentMessage(`${selectedAttachments.length} attachment${selectedAttachments.length === 1 ? '' : 's'} uploaded successfully.`);
+          setSelectedAttachments([]);
+          if (attachmentInputRef.current) attachmentInputRef.current.value = '';
+        } catch {
+          setAttachmentError(`Ticket ${payload.ticketNumber} was created, but an attachment could not be uploaded.`);
+        }
+      }
     } catch (error) {
       setSubmitError(
         error instanceof Error ? error.message : 'Unable to create the ticket. Please try again.'
@@ -186,6 +246,8 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
 
       {createdTicket && <div className="alert alert-success" role="status"><strong>Ticket created successfully.</strong><p className="mb-0">Ticket Number: {createdTicket.ticketNumber} | Status: {createdTicket.status}</p></div>}
       {submitState === 'error' && <div className="alert alert-danger" role="alert">{submitError}</div>}
+      {attachmentError && <div className="alert alert-warning" role="alert">{attachmentError}</div>}
+      {attachmentMessage && <div className="alert alert-success" role="status">{attachmentMessage}</div>}
 
       <form noValidate onSubmit={submitTicket}>
         <div className="row g-3">
@@ -221,6 +283,12 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
             <textarea aria-describedby={errors.description ? 'description-error' : undefined} className={`form-control ${errors.description ? 'is-invalid' : ''}`} id="description" onChange={(event) => updateForm('description', event.target.value)} rows={6} value={form.description} />
             {errors.description && <div className="invalid-feedback" id="description-error">{errors.description}</div>}
           </div>
+          <div className="col-12">
+            <label className="form-label fw-semibold" htmlFor="create-ticket-attachments">Attachments <span className="text-secondary fw-normal">(optional)</span></label>
+            <input accept=".jpg,.jpeg,.png,.webp,.pdf" className="form-control" id="create-ticket-attachments" multiple onChange={(event) => chooseAttachments(event.target.files)} ref={attachmentInputRef} type="file" />
+            <div className="form-text">Up to 5 files. JPG, JPEG, PNG, WEBP, or PDF; 5 MB maximum per file.</div>
+            {selectedAttachments.length > 0 && <p className="small text-secondary mt-2 mb-0">Selected: {selectedAttachments.map((file) => file.name).join(', ')}</p>}
+          </div>
         </div>
         <button className="btn btn-success mt-4" disabled={submitState === 'submitting'} type="submit">{submitState === 'submitting' ? 'Creating Ticket...' : 'Create Ticket'}</button>
       </form>
@@ -230,23 +298,46 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
 
 function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTicket: (ticketNumber: string) => void }) {
   const [tickets, setTickets] = useState<TicketListResponse | null>(null);
+  const [categories, setCategories] = useState<Lookup[]>([]);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [query, setQuery] = useState({ q: '', status: '', priority: '', sort: 'updatedAt', page: 1 });
+  const [query, setQuery] = useState({
+    q: '',
+    categoryId: '',
+    status: '',
+    priority: '',
+    sort: 'updatedAt',
+    direction: 'desc',
+    page: 1
+  });
 
   useEffect(() => {
     async function loadTickets() {
       setLoadState('loading');
       try {
-        const params = new URLSearchParams({ page: String(query.page), pageSize: '10', sort: query.sort });
+        const params = new URLSearchParams({
+          page: String(query.page),
+          pageSize: '10',
+          sort: query.sort,
+          direction: query.direction
+        });
         if (query.q) params.set('q', query.q);
+        if (query.categoryId) params.set('categoryId', query.categoryId);
         if (query.status) params.set('status', query.status);
         if (query.priority) params.set('priority', query.priority);
-        const response = await fetch(`${apiBaseUrl}/api/tickets?${params}`, {
-          headers: { 'X-Development-Requester-Id': String(requester.id) }
-        });
-        if (!response.ok) throw new Error();
-        const payload = (await response.json()) as Partial<TicketListResponse>;
+        const [categoryResponse, response] = await Promise.all([
+          fetch(`${apiBaseUrl}/api/categories`),
+          fetch(`${apiBaseUrl}/api/tickets?${params}`, {
+            headers: { 'X-Development-Requester-Id': String(requester.id) }
+          })
+        ]);
+        if (!categoryResponse.ok || !response.ok) throw new Error();
+        const [categoryPayload, payload] = await Promise.all([
+          categoryResponse.json() as Promise<Lookup[]>,
+          response.json() as Promise<Partial<TicketListResponse>>
+        ]);
+        if (!Array.isArray(categoryPayload)) throw new Error();
         if (!Array.isArray(payload.items) || !payload.pagination) throw new Error();
+        setCategories(categoryPayload);
         setTickets(payload as TicketListResponse);
         setLoadState('ready');
       } catch {
@@ -260,7 +351,28 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
     setQuery((current) => ({ ...current, ...change, page: change.page ?? 1 }));
   }
 
-  return <section className="ticket-list-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><h1 className="h3 mb-1">My Tickets</h1><p className="text-secondary mb-0">Support requests created by {requester.name}.</p></div><span className="badge text-bg-light align-self-start">{tickets?.pagination.totalItems ?? 0} tickets</span></div><div className="row g-2 mb-4"><div className="col-md-5"><label className="visually-hidden" htmlFor="ticket-search">Search tickets</label><input className="form-control" id="ticket-search" onChange={(event) => changeQuery({ q: event.target.value })} placeholder="Search ticket number or summary" value={query.q} /></div><div className="col-sm-4 col-md-2"><label className="visually-hidden" htmlFor="ticket-status">Status</label><select className="form-select" id="ticket-status" onChange={(event) => changeQuery({ status: event.target.value })} value={query.status}><option value="">All statuses</option><option value="New">New</option></select></div><div className="col-sm-4 col-md-2"><label className="visually-hidden" htmlFor="ticket-priority">Priority</label><select className="form-select" id="ticket-priority" onChange={(event) => changeQuery({ priority: event.target.value })} value={query.priority}><option value="">All priorities</option><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option></select></div><div className="col-sm-4 col-md-3"><label className="visually-hidden" htmlFor="ticket-sort">Sort tickets</label><select className="form-select" id="ticket-sort" onChange={(event) => changeQuery({ sort: event.target.value })} value={query.sort}><option value="updatedAt">Last updated</option><option value="createdAt">Created date</option><option value="ticketNumber">Ticket number</option></select></div></div>{loadState === 'loading' && <p role="status">Loading your tickets...</p>}{loadState === 'error' && <div className="alert alert-danger" role="alert">Unable to load your tickets. Check the backend and try again.</div>}{loadState === 'ready' && tickets?.items.length === 0 && <div className="alert alert-light border">{query.q || query.status || query.priority ? 'No tickets match these filters.' : 'You have not created any tickets yet.'}</div>}{loadState === 'ready' && tickets && tickets.items.length > 0 && <><div className="table-responsive"><table className="table align-middle"><thead><tr><th>Ticket Number</th><th>Summary</th><th>Category</th><th>Status</th><th>Priority</th><th>Last Updated</th></tr></thead><tbody>{tickets.items.map((ticket) => <tr key={ticket.ticketNumber}><td><button className="btn btn-link p-0 text-success fw-semibold" onClick={() => onOpenTicket(ticket.ticketNumber)} type="button">{ticket.ticketNumber}</button></td><td>{ticket.summary}</td><td>{ticket.category.name}</td><td><span className="badge text-bg-light">{ticket.status}</span></td><td>{ticket.requestedPriority}</td><td>{new Date(ticket.updatedAt).toLocaleString()}</td></tr>)}</tbody></table></div><div className="d-flex justify-content-between align-items-center"><span className="small text-secondary">Page {tickets.pagination.page} of {tickets.pagination.totalPages}</span><div className="btn-group"><button className="btn btn-outline-success btn-sm" disabled={query.page <= 1} onClick={() => changeQuery({ page: query.page - 1 })} type="button">Previous</button><button className="btn btn-outline-success btn-sm" disabled={query.page >= tickets.pagination.totalPages} onClick={() => changeQuery({ page: query.page + 1 })} type="button">Next</button></div></div></>}</section>;
+  const hasFilters = Boolean(query.q || query.categoryId || query.status || query.priority);
+
+  return (
+    <section className="ticket-list-panel">
+      <div className="d-flex flex-wrap justify-content-between gap-2 mb-4">
+        <div><h1 className="h3 mb-1">My Tickets</h1><p className="text-secondary mb-0">Support requests created by {requester.name}.</p></div>
+        <span className="badge text-bg-light align-self-start">{tickets?.pagination.totalItems ?? 0} tickets</span>
+      </div>
+      <div className="row g-2 mb-4">
+        <div className="col-md-4"><label className="visually-hidden" htmlFor="ticket-search">Search tickets</label><input className="form-control" id="ticket-search" onChange={(event) => changeQuery({ q: event.target.value })} placeholder="Search ticket number or summary" value={query.q} /></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-category">Category</label><select className="form-select" id="ticket-category" onChange={(event) => changeQuery({ categoryId: event.target.value })} value={query.categoryId}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-status">Status</label><select className="form-select" id="ticket-status" onChange={(event) => changeQuery({ status: event.target.value })} value={query.status}><option value="">All statuses</option><option value="New">New</option></select></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-priority">Priority</label><select className="form-select" id="ticket-priority" onChange={(event) => changeQuery({ priority: event.target.value })} value={query.priority}><option value="">All priorities</option><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option></select></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-sort">Sort tickets</label><select className="form-select" id="ticket-sort" onChange={(event) => changeQuery({ sort: event.target.value })} value={query.sort}><option value="updatedAt">Last updated</option><option value="createdAt">Created date</option><option value="ticketNumber">Ticket number</option></select></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-direction">Sort direction</label><select className="form-select" id="ticket-direction" onChange={(event) => changeQuery({ direction: event.target.value })} value={query.direction}><option value="desc">Descending</option><option value="asc">Ascending</option></select></div>
+      </div>
+      {loadState === 'loading' && <p role="status">Loading your tickets...</p>}
+      {loadState === 'error' && <div className="alert alert-danger" role="alert">Unable to load your tickets. Check the backend and try again.</div>}
+      {loadState === 'ready' && tickets?.items.length === 0 && <div className="alert alert-light border">{hasFilters ? 'No tickets match these filters.' : 'You have not created any tickets yet.'}</div>}
+      {loadState === 'ready' && tickets && tickets.items.length > 0 && <><div className="table-responsive"><table className="table align-middle"><thead><tr><th>Ticket Number</th><th>Summary</th><th>Category</th><th>Status</th><th>Priority</th><th>Last Updated</th></tr></thead><tbody>{tickets.items.map((ticket) => <tr key={ticket.ticketNumber}><td><button className="btn btn-link p-0 text-success fw-semibold" onClick={() => onOpenTicket(ticket.ticketNumber)} type="button">{ticket.ticketNumber}</button></td><td>{ticket.summary}</td><td>{ticket.category.name}</td><td><span className="badge text-bg-light">{ticket.status}</span></td><td>{ticket.requestedPriority}</td><td>{new Date(ticket.updatedAt).toLocaleString()}</td></tr>)}</tbody></table></div><div className="d-flex justify-content-between align-items-center"><span className="small text-secondary">Page {tickets.pagination.page} of {tickets.pagination.totalPages}</span><div className="btn-group"><button className="btn btn-outline-success btn-sm" disabled={query.page <= 1} onClick={() => changeQuery({ page: query.page - 1 })} type="button">Previous</button><button className="btn btn-outline-success btn-sm" disabled={query.page >= tickets.pagination.totalPages} onClick={() => changeQuery({ page: query.page + 1 })} type="button">Next</button></div></div></>}
+    </section>
+  );
 }
 
 function TicketDetailView({ requester, ticketNumber }: { requester: Requester; ticketNumber: string }) {
@@ -290,26 +402,22 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
 function AttachmentSection({ requester, ticketNumber, initialAttachments }: { requester: Requester; ticketNumber: string; initialAttachments: Attachment[] }) {
   const [attachments, setAttachments] = useState(initialAttachments);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [removalReasons, setRemovalReasons] = useState<Record<number, string>>({});
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
-
-  function validFile(file: File) {
-    const extension = file.name.split('.').pop()?.toLowerCase();
-    return Boolean(extension && allowedExtensions.includes(extension) && file.size <= 5 * 1024 * 1024);
-  }
+  const activeAttachmentCount = attachments.filter((attachment) => !attachment.removedAt).length;
 
   async function uploadAttachment() {
     if (!selectedFile) {
       setMessage('Choose an attachment before uploading.');
       return;
     }
-    if (!validFile(selectedFile)) {
+    if (!validAttachmentFile(selectedFile)) {
       setMessage('Choose a JPG, JPEG, PNG, WEBP, or PDF file that is 5 MB or smaller.');
       return;
     }
-    if (attachments.length >= 5) {
+    if (activeAttachmentCount >= 5) {
       setMessage('A ticket can have at most five active attachments.');
       return;
     }
@@ -335,13 +443,30 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
   }
 
   async function removeAttachment(attachment: Attachment) {
+    const reason = removalReasons[attachment.id]?.trim() ?? '';
+    if (reason.length < 3 || reason.length > 500) {
+      setMessage('Removal reason must contain 3 to 500 characters.');
+      return;
+    }
     if (!window.confirm(`Remove ${attachment.originalFileName}?`)) return;
     setBusy(true);
     setMessage('');
     try {
-      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, { method: 'DELETE', headers: { 'X-Development-Requester-Id': String(requester.id) } });
+      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Development-Requester-Id': String(requester.id)
+        },
+        body: JSON.stringify({ reason })
+      });
       if (!response.ok) throw new Error(await errorMessage(response, 'Unable to remove attachment.'));
-      setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+      const payload = response.status === 204
+        ? { ...attachment, removedAt: new Date().toISOString(), removalReason: reason }
+        : await response.json().catch(() => null) as Attachment | null;
+      if (!payload?.id) throw new Error('Unable to read the removed attachment metadata.');
+      setAttachments((current) => current.map((item) => item.id === attachment.id ? payload : item));
+      setRemovalReasons((current) => ({ ...current, [attachment.id]: '' }));
       setMessage('Attachment removed.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to remove attachment.');
@@ -369,7 +494,27 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
     }
   }
 
-  return <section className="border-top mt-4 pt-3"><h2 className="h5">Attachments</h2><p className="small text-secondary">JPG, JPEG, PNG, WEBP, or PDF. Maximum 5 MB each and 5 active files per ticket.</p><div className="input-group"><input accept=".jpg,.jpeg,.png,.webp,.pdf" aria-label="Attachment file" className="form-control" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} ref={inputRef} type="file" /><button className="btn btn-success" disabled={busy} onClick={uploadAttachment} type="button">Upload</button></div>{message && <p className="mt-2 mb-0" role="status">{message}</p>}<ul className="list-group list-group-flush mt-3">{attachments.map((attachment) => <li className="list-group-item px-0 d-flex flex-wrap gap-2 justify-content-between align-items-center" key={attachment.id}><span>{attachment.originalFileName} <span className="text-secondary small">({Math.ceil(attachment.sizeBytes / 1024)} KB)</span></span><span className="btn-group"><button className="btn btn-outline-success btn-sm" disabled={busy} onClick={() => downloadAttachment(attachment)} type="button">Download</button><button className="btn btn-outline-danger btn-sm" disabled={busy} onClick={() => removeAttachment(attachment)} type="button">Remove</button></span></li>)}</ul>{attachments.length === 0 && <p className="text-secondary small mt-3 mb-0">No active attachments.</p>}</section>;
+  return (
+    <section className="border-top mt-4 pt-3">
+      <h2 className="h5">Attachments</h2>
+      <p className="small text-secondary">JPG, JPEG, PNG, WEBP, or PDF. Maximum 5 MB each and 5 active files per ticket.</p>
+      <div className="input-group"><input accept=".jpg,.jpeg,.png,.webp,.pdf" aria-label="Attachment file" className="form-control" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} ref={inputRef} type="file" /><button className="btn btn-success" disabled={busy} onClick={uploadAttachment} type="button">Upload</button></div>
+      {message && <p className="mt-2 mb-0" role="status">{message}</p>}
+      <ul className="list-group list-group-flush mt-3">
+        {attachments.map((attachment) => (
+          <li className="list-group-item px-0" key={attachment.id}>
+            <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+              <span>{attachment.originalFileName} <span className="text-secondary small">({Math.ceil(attachment.sizeBytes / 1024)} KB)</span> {attachment.removedAt && <span className="badge text-bg-secondary">Removed</span>}</span>
+              {!attachment.removedAt && <span className="btn-group"><button className="btn btn-outline-success btn-sm" disabled={busy} onClick={() => downloadAttachment(attachment)} type="button">Download</button><button className="btn btn-outline-danger btn-sm" disabled={busy} onClick={() => removeAttachment(attachment)} type="button">Remove</button></span>}
+            </div>
+            {!attachment.removedAt && <div className="mt-2"><label className="form-label small mb-1" htmlFor={`removal-reason-${attachment.id}`}>Removal reason for {attachment.originalFileName}</label><input className="form-control form-control-sm" id={`removal-reason-${attachment.id}`} maxLength={500} onChange={(event) => setRemovalReasons((current) => ({ ...current, [attachment.id]: event.target.value }))} placeholder="Reason required before removal" value={removalReasons[attachment.id] ?? ''} /></div>}
+            {attachment.removedAt && <p className="small text-secondary mt-2 mb-0">Removed {new Date(attachment.removedAt).toLocaleString()}. Reason: {attachment.removalReason ?? 'Not recorded.'}</p>}
+          </li>
+        ))}
+      </ul>
+      {activeAttachmentCount === 0 && <p className="text-secondary small mt-3 mb-0">No active attachments.</p>}
+    </section>
+  );
 }
 
 export function App() {

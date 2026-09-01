@@ -32,23 +32,28 @@ describe('Create Ticket', () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' });
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(categoryResponse())
       .mockResolvedValueOnce(ticketListResponse())
       .mockResolvedValueOnce(categoryResponse())
       .mockResolvedValueOnce(systemResponse())
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ticketNumber: 'TKT-20260824-0001', status: 'New', createdAt: '2026-08-24T12:00:00.000Z' }), { status: 201 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ticketNumber: 'TKT-20260824-0001', status: 'New', createdAt: '2026-08-24T12:00:00.000Z' }), { status: 201 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 7, originalFileName: 'evidence.pdf', mimeType: 'application/pdf', sizeBytes: 8, createdAt: '2026-08-24T12:00:01.000Z', removedAt: null, removalReason: null }), { status: 201 }));
     render(<App />);
 
     await openCreateTicket();
     await completeTicketForm();
+    await userEvent.upload(screen.getByLabelText(/attachments/i), new File(['evidence'], 'evidence.pdf', { type: 'application/pdf' }));
     await userEvent.click(screen.getByRole('button', { name: /^create ticket$/i }));
 
     expect(await screen.findByText(/ticket created successfully/i)).toBeInTheDocument();
     expect(screen.getByText(/TKT-20260824-0001/)).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:3000/api/tickets', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'X-Development-Requester-Id': '1', 'Idempotency-Key': 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' }), body: expect.stringContaining('Campus Wi-Fi connection fails') }));
+    expect(await screen.findByText(/1 attachment uploaded successfully/i)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenNthCalledWith(6, 'http://localhost:3000/api/tickets', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'X-Development-Requester-Id': '1', 'Idempotency-Key': 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' }), body: expect.stringContaining('Campus Wi-Fi connection fails') }));
+    expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:3000/api/tickets/TKT-20260824-0001/attachments', expect.objectContaining({ method: 'POST', headers: { 'X-Development-Requester-Id': '1' }, body: expect.any(FormData) }));
   });
 
   it('shows adjacent validation feedback before submitting an incomplete form', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse());
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse());
     render(<App />);
 
     await openCreateTicket();
@@ -62,7 +67,7 @@ describe('Create Ticket', () => {
 
   it('retains entered values and shows a useful error after a create request fails', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'a5a095f9-8eaf-48b9-bd62-bfc7b7d65610' });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Ticket service is unavailable.' }), { status: 500 }));
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(requesterResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse()).mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Ticket service is unavailable.' }), { status: 500 }));
     render(<App />);
 
     await openCreateTicket();

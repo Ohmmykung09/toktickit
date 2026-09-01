@@ -47,7 +47,9 @@ describe('Lab 2 attachment APIs', () => {
       originalFileName: 'evidence.pdf',
       mimeType: 'application/pdf',
       sizeBytes: expect.any(Number),
-      createdAt: expect.any(String)
+      createdAt: expect.any(String),
+      removedAt: null,
+      removalReason: null
     });
 
     const listed = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
@@ -61,12 +63,38 @@ describe('Lab 2 attachment APIs', () => {
       originalFileName: 'evidence.pdf',
       mimeType: 'application/pdf',
       sizeBytes: expect.any(Number),
-      createdAt: expect.any(String)
+      createdAt: expect.any(String),
+      removedAt: null,
+      removalReason: null
     }]);
     expect(downloaded.status).toBe(200);
-    expect(removed.status).toBe(200);
-    expect(listedAfterRemoval.body).toEqual([]);
-    expect((await prisma.attachment.findUniqueOrThrow({ where: { id: uploaded.body.id } })).removedAt).not.toBeNull();
+    expect(removed.status).toBe(400);
+    expect(listedAfterRemoval.body).toEqual(listed.body);
+
+    const removedWithReason = await request(app)
+      .delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`)
+      .set('X-Development-Requester-Id', String(requester.id))
+      .send({ reason: 'Uploaded the wrong evidence file.' });
+    const listedAfterReasonedRemoval = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
+    const blockedDownload = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
+
+    expect(removedWithReason.status).toBe(200);
+    expect(removedWithReason.body).toEqual({
+      id: uploaded.body.id,
+      originalFileName: 'evidence.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: expect.any(Number),
+      createdAt: expect.any(String),
+      removedAt: expect.any(String),
+      removalReason: 'Uploaded the wrong evidence file.'
+    });
+    expect(listedAfterReasonedRemoval.body).toEqual([removedWithReason.body]);
+    expect(blockedDownload.status).toBe(404);
+    expect((await prisma.attachment.findUniqueOrThrow({ where: { id: uploaded.body.id } }))).toMatchObject({
+      removedAt: expect.any(Date),
+      removalReason: 'Uploaded the wrong evidence file.',
+      removedByRequesterId: requester.id
+    });
   });
 
   it('rejects disallowed files and attachment access by another requester', async () => {

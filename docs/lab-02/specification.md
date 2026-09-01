@@ -51,7 +51,7 @@ The Development Requester selector is a testing context for Lab 2. It is not rea
 | BR-08 | Requested Priority is required and must be one of `Low`, `Medium`, `High`, or `Critical`. |
 | BR-09 | Permitted attachment extensions are JPG, JPEG, PNG, WEBP, and PDF. Each file is at most 5 MB. |
 | BR-10 | A Ticket may have at most five active attachments. Soft-removed attachments do not count toward this limit. |
-| BR-11 | Attachment removal is a soft removal. Removed attachments remain auditable but cannot be downloaded or previewed by requesters. |
+| BR-11 | Attachment removal is a soft removal and requires a reason of 3 to 500 characters. Removed metadata and the reason remain visible for audit, but the file cannot be downloaded or previewed by requesters. |
 | BR-12 | For each ticket-submit action, the frontend generates one UUID `Idempotency-Key` and disables duplicate submit actions while the request is in progress. The backend atomically records and checks the key for the selected requester: a retry with the same key and the same payload returns the original ticket without creating another ticket; reusing the key with a different payload returns `409 Conflict`. |
 | BR-13 | When a create or upload request fails, the UI must keep entered ticket data and display a useful error message. A successful ticket is not rolled back when a later attachment upload fails. |
 
@@ -70,8 +70,8 @@ The Development Requester selector is a testing context for Lab 2. It is not rea
 
 - `DevelopmentRequester` owns many `Ticket` records. Lab 3 can later replace this relationship with an authenticated user identity without changing the ticket workflow.
 - `Ticket` references one `Category` and one `RelatedSystem`; both lookup records have an active flag so historical tickets retain their references.
-- `Attachment` belongs to one `Ticket` and has `removedAt` and `removedByRequesterId` for soft removal. Physical file deletion is not required in Lab 2.
-- `Ticket` stores a unique idempotency key for the create request. This gives the backend a durable duplicate-submission check even when a client retries a request after a network failure.
+- `Attachment` belongs to one `Ticket` and has `removedAt`, `removalReason`, and `removedByRequesterId` for soft removal. Physical file deletion is not required in Lab 2.
+- `Ticket` stores a requester-scoped idempotency key for the create request. The composite uniqueness of requester and key prevents duplicate submissions while allowing different requesters to use the same UUID value independently.
 - The ticket list will use indexes that support requester ownership and common list ordering, including requester plus creation time and Ticket Number uniqueness.
 
 ## 6. Acceptance Criteria by Feature
@@ -99,7 +99,7 @@ The Development Requester selector is a testing context for Lab 2. It is not rea
 
 - Permitted files within the file-count and size limits upload successfully.
 - Invalid type, excessive size, excessive count, and non-owner operations fail safely.
-- Soft-removed files are no longer downloadable or previewable.
+- Soft-removed metadata and its reason remain visible, while the removed file is no longer downloadable or previewable.
 
 ### AC-05 User Experience
 

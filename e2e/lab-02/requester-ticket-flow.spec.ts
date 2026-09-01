@@ -29,6 +29,7 @@ test('a requester creates, finds, opens, and manages an attachment on an owned t
   await page.getByRole('button', { name: 'Upload' }).click();
   await expect(page.getByText('Attachment uploaded successfully.')).toBeVisible();
 
+  await page.getByLabel(/removal reason for evidence.pdf/i).fill('E2E cleanup after verification.');
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByText('Attachment removed.')).toBeVisible();
