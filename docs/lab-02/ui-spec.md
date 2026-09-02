@@ -39,7 +39,7 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 
 ## 5. My Tickets and Ticket Detail
 
-- My Tickets provides search, filters, sort control, pagination, and a Create Ticket action.
+- My Tickets provides search, category/status/priority filters, sort field and direction controls, pagination, and a Create Ticket action.
 - Each ticket row shows Ticket Number, Summary, Category, Current Status, and Last Updated.
 - Loading, empty collection, no search results, and API failure states have distinct messages.
 - Ticket Detail presents ticket information as read-only fields and has an attachment section.
@@ -48,7 +48,7 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 
 - File input states permitted types, 5 MB maximum per file, and five active attachments maximum.
 - Each uploaded attachment shows its name, type, size, and available action.
-- Remove asks for confirmation before soft removal.
+- Remove requires a reason and asks for confirmation before soft removal. The removed item remains visible with a Removed badge, timestamp, and reason, without active actions.
 - Invalid type, excessive size/count, upload failure, removal failure, and removed-file states display clear messages.
 
 ## 7. Responsive and Accessibility Requirements
@@ -57,3 +57,14 @@ The navigation includes TokTickIT identity, My Tickets, Create Ticket, selected 
 - Tablet: controls remain comfortably tappable; tables may use responsive stacking or horizontal scrolling where necessary.
 - Mobile: primary actions remain visible, controls fill available width, and ticket information stacks vertically.
 - Every interactive control has an accessible name. Keyboard focus is visible. Status messages use text as well as color.
+
+## 8. Visual Inspection Checklist
+
+The final inspection is performed on `main` at desktop (1440 x 900), tablet (768 x 1024), and mobile (390 x 844) viewports. Screenshots are stored under `artifacts/lab-02/screenshots/`.
+
+- Zen Green primary actions, secondary actions, destructive actions, and disabled/busy controls remain visually distinct.
+- Editable fields, system-generated/read-only values, required markers, and adjacent validation messages are visible.
+- Requester context and active navigation remain visible on every required screen.
+- Create Ticket, My Tickets, Ticket Detail, and Attachment controls have no clipped text, overlap, or unexpected horizontal page overflow.
+- Ticket list filters, sort control, pagination, attachment action buttons, and error/empty/no-result states remain usable at each viewport.
+- Keyboard focus and text status/error messages make state understandable without relying only on color.

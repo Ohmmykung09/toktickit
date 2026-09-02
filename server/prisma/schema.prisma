@@ -40,7 +40,7 @@ model RelatedSystem {
 model Ticket {
   id                     Int                    @id @default(autoincrement())
   ticketNumber           String                 @unique
-  idempotencyKey         String                 @unique
+  idempotencyKey         String
   requesterId            Int
   categoryId             Int
   relatedSystemId        Int
@@ -56,6 +56,7 @@ model Ticket {
   attachments            Attachment[]
 
   @@index([requesterId, updatedAt])
+  @@unique([requesterId, idempotencyKey])
 }
 
 model Attachment {
@@ -67,6 +68,7 @@ model Attachment {
   sizeBytes              Int
   createdAt              DateTime               @default(now())
   removedAt              DateTime?
+  removalReason          String?
   removedByRequesterId   Int?
   ticket                 Ticket                 @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   removedByRequester     DevelopmentRequester? @relation("AttachmentRemovedBy", fields: [removedByRequesterId], references: [id], onDelete: SetNull)

@@ -48,7 +48,7 @@ Request:
   "categoryId": 1,
   "relatedSystemId": 2,
   "summary": "Cannot connect to campus Wi-Fi",
-  "requestedPriority": "High",
+  "requestedPriority": "HIGH",
   "description": "The connection fails after selecting the campus Wi-Fi network."
 }
 ```
@@ -114,7 +114,7 @@ Invalid query parameters return `400 Bad Request`.
 
 ### GET /api/tickets/:ticketNumber
 
-Returns full ticket details and active attachment metadata when the selected requester owns the ticket. A ticket that does not exist returns `404`; a ticket owned by another requester returns `403` without returning its data.
+Returns full ticket details and active or soft-removed attachment metadata when the selected requester owns the ticket. Removed metadata includes `removedAt` and `removalReason`. A ticket that does not exist returns `404`; a ticket owned by another requester returns `403` without returning its data.
 
 ## 4. Attachment Endpoints
 
@@ -124,11 +124,11 @@ Uploads one attachment using `multipart/form-data` field name `file`.
 
 The selected requester must own the ticket. The backend accepts only JPG, JPEG, PNG, WEBP, and PDF files up to 5 MB and allows at most five active attachments.
 
-Response `201 Created` includes attachment ID, original file name, MIME type, size, and upload time.
+Response `201 Created` includes attachment ID, original file name, MIME type, size, upload time, and null removal fields. Internal storage names and ownership foreign keys are never returned.
 
 ### GET /api/tickets/:ticketNumber/attachments
 
-Returns active attachment metadata for a ticket owned by the selected requester.
+Returns active and soft-removed attachment metadata for a ticket owned by the selected requester. Soft-removed records remain visible for audit.
 
 ### GET /api/tickets/:ticketNumber/attachments/:attachmentId/download
 
@@ -136,7 +136,15 @@ Downloads an active attachment belonging to a ticket owned by the selected reque
 
 ### DELETE /api/tickets/:ticketNumber/attachments/:attachmentId
 
-Soft-removes an active attachment belonging to a ticket owned by the selected requester. The request may include an optional removal reason. The response is `200 OK` and removed files are excluded from normal attachment responses.
+Soft-removes an active attachment belonging to a ticket owned by the selected requester.
+
+Request:
+
+```json
+{ "reason": "Uploaded the wrong evidence file." }
+```
+
+The trimmed reason is required and must contain 3 to 500 characters. The response is `200 OK` with public attachment metadata, `removedAt`, and `removalReason`. Removed metadata remains in list and detail responses, while download returns `404`.
 
 ## 5. Failure Behaviour
 
