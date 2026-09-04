@@ -1,171 +1,110 @@
 # TokTickIT
 
-TokTickIT is the Lab 1 full-stack starter for CPE 334. This branch sets up the project foundation for a React/Vite frontend, an Express API backend, Prisma, PostgreSQL configuration, and automated test tooling.
+TokTickIT is a full-stack requester-facing IT support ticketing MVP for CPE 334 Lab 2. A Development Requester selects a temporary test identity, creates and owns tickets, finds them in My Tickets, opens ticket details, and manages permitted attachments.
 
-## Project Structure
+The Development Requester selector is a Lab 2 testing mechanism only. It is not authentication and does not implement passwords, sessions, tokens, or user roles.
 
-```text
-toktickit/
-├── client/
-│   └── .env.example
-├── server/
-│   ├── prisma/
-│   ├── src/
-│   └── tests/
-│       └── lab-01/
-├── docs/
-│   └── lab-01/
-├── .env.example
-├── .gitignore
-└── README.md
-```
+## Technology
+
+- Client: React, TypeScript, Vite, Bootstrap
+- Server: Express, TypeScript, Prisma
+- Database: PostgreSQL
+- Automated tests: Vitest, Testing Library, Supertest
 
 ## Requirements
 
 - Node.js 20 or newer
 - npm
-- PostgreSQL
+- PostgreSQL running locally
 
-## Setup
+## Project Structure
 
-Install all workspace dependencies:
+```text
+toktickit/
+|- client/                       React requester application
+|- server/                       Express API and Prisma schema
+|- docs/lab-02/                  Engineering contract and delivery records
+|- e2e/lab-02/                   Browser workflow specification
+`- artifacts/lab-02/screenshots/ Final screenshot evidence locations
+```
+
+## Local Setup
+
+Install workspace dependencies:
 
 ```powershell
 npm install
 ```
 
-Copy the backend environment template and set your local PostgreSQL connection string:
+Create the backend environment file and set your PostgreSQL password in `DATABASE_URL`:
 
 ```powershell
 Copy-Item .env.example server/.env
 ```
 
-Example `DATABASE_URL`:
+Example value:
 
 ```text
-postgresql://postgres:postgres@localhost:5432/toktickit?schema=public
+DATABASE_URL="postgresql://postgres:<your-password>@localhost:5432/toktickit?schema=public"
 ```
 
-Copy the frontend environment template so Vite can load the API base URL:
+Create the frontend environment file:
 
 ```powershell
 Copy-Item client/.env.example client/.env
 ```
 
-Example `VITE_API_BASE_URL`:
+The local client uses this API base URL:
 
 ```text
-http://localhost:3000
+VITE_API_BASE_URL="http://localhost:3000"
 ```
 
-Generate the Prisma client:
+Generate Prisma, apply migrations, and load the repeatable Lab 2 seed data:
 
 ```powershell
 npm run prisma:generate
-```
-
-Check that PostgreSQL is reachable with the configured `DATABASE_URL`:
-
-```powershell
+npm run prisma:migrate
+npm run prisma:seed
 npm run db:check
 ```
 
-Expected success output:
+The seed creates the four required categories, seven related systems, four active Development Requesters, and one inactive Development Requester. It can be run repeatedly without duplicates.
 
-```text
-PostgreSQL connection check passed.
-```
+## Run Locally
 
-Create or update the local database schema:
-
-```powershell
-npm run prisma:migrate
-```
-
-Seed the Lab 1 request categories:
-
-```powershell
-npm run prisma:seed
-```
-
-The seed is safe to run more than once and inserts these categories when missing:
-
-```text
-Account and Access
-Hardware
-Software
-Network
-```
-
-## Development
-
-Run the frontend:
-
-```powershell
-npm run dev:client
-```
-
-Run the backend:
+Use two terminals from the repository root:
 
 ```powershell
 npm run dev:server
 ```
 
-Health check endpoint:
-
-```text
-GET http://localhost:3000/api/health
-```
-
-Expected response:
-
-```json
-{
-  "status": "ok",
-  "service": "TokTickIT API"
-}
-```
-
-Category list endpoint:
-
-```text
-GET http://localhost:3000/api/categories
-```
-
-Expected response:
-
-```json
-[
-  { "id": 1, "name": "Account and Access" },
-  { "id": 2, "name": "Hardware" },
-  { "id": 3, "name": "Software" },
-  { "id": 4, "name": "Network" }
-]
-```
-
-Build and run the compiled backend:
-
 ```powershell
-npm run build --workspace server
-npm start --workspace server
+npm run dev:client
 ```
 
-## Tests
+Open [http://localhost:5173](http://localhost:5173). The API runs at `http://localhost:3000`.
 
-Run all configured tests:
+## Verification
+
+Run all automated unit, API, and UI tests:
 
 ```powershell
 npm test
 ```
 
-Run frontend tests only:
+Build both projects:
 
 ```powershell
-npm run test:client
+npm run build
 ```
 
-Run backend tests only:
+For the browser end-to-end flow, install the Playwright test runner and Chromium browser, then run the test while PostgreSQL is available. The configuration starts the local client and server unless they are already running.
 
 ```powershell
-npm run test:server
+npm install --save-dev playwright@1.62.1
+npx playwright install chromium
+npx playwright test e2e/lab-02/requester-ticket-flow.spec.ts
 ```
+
+The full traceability table, responsive checklist, and final evidence instructions are in [docs/lab-02/tests.md](docs/lab-02/tests.md).
