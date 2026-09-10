@@ -6,7 +6,7 @@ import { prisma } from '../../src/db.js';
 
 async function ticketContext() {
   const [requester, category, relatedSystem] = await Promise.all([
-    prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } }),
+    prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } }),
     prisma.category.findFirstOrThrow({ where: { isActive: true } }),
     prisma.relatedSystem.findFirstOrThrow({ where: { isActive: true } })
   ]);
@@ -58,8 +58,8 @@ describe('Lab 2 create ticket API', () => {
 
   it('returns the original ticket for a retry and rejects different ticket details for the same key', async () => {
     const { requester, category, relatedSystem } = await ticketContext();
-    const otherRequester = await prisma.developmentRequester.findFirstOrThrow({
-      where: { isActive: true, id: { not: requester.id } }
+    const otherRequester = await prisma.user.findFirstOrThrow({
+      where: { isActive: true, role: 'REQUESTER', id: { not: requester.id } }
     });
     const key = randomUUID();
     const ticket = validTicket(category.id, relatedSystem.id, `Printer request ${Date.now()}`);
@@ -82,8 +82,8 @@ describe('Lab 2 create ticket API', () => {
 
   it('rejects missing requester context, inactive requesters, and invalid lookup values safely', async () => {
     const { requester, category, relatedSystem } = await ticketContext();
-    const inactiveRequester = await prisma.developmentRequester.findFirstOrThrow({
-      where: { isActive: false }
+    const inactiveRequester = await prisma.user.findFirstOrThrow({
+      where: { isActive: false, role: 'REQUESTER' }
     });
     const response = await request(app).post('/api/tickets').send({ summary: 'Bad' });
     const inactiveRequesterResponse = await request(app)

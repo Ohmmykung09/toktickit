@@ -31,8 +31,8 @@ No test may depend on test execution order or mutate shared seed records without
 | API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-16 | API | AC-12, AC-13 | Duplicate email, initial-password reset, and session revocation | Conflict/success contracts are enforced | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-17 | API | AC-14 | Self-deactivation and last-active-Administrator protections | Atomic `409 ADMIN_SAFETY_RULE` without partial update | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| MIG-01 | Migration | AC-05 | Lab 2 Development Requesters become Users with stable ownership | Counts and Ticket/Attachment ownership match | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| MIG-02 | Migration | AC-05, AC-16 | Migration and seed repeat safety | No duplicate users/data loss; expected seed distribution | `server/tests/lab-03/migration.integration.test.ts` | Planned |
+| MIG-01 | Migration | AC-05 | Lab 2 Development Requesters become Users with stable ownership | Counts and Ticket/Attachment ownership match | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
+| MIG-02 | Migration | AC-05, AC-16 | Migration and seed repeat safety | No duplicate users/data loss; expected seed distribution | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Planned |
 | UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Planned |
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |

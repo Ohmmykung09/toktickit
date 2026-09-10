@@ -37,7 +37,7 @@ afterAll(async () => {
 
 describe('Lab 2 attachment APIs', () => {
   it('uploads, lists, downloads, and soft-removes an owned permitted attachment', async () => {
-    const requester = await prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } });
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const ticket = await ticketFor(requester.id);
     const uploaded = await upload(ticket.ticketNumber, requester.id);
 
@@ -93,12 +93,12 @@ describe('Lab 2 attachment APIs', () => {
     expect((await prisma.attachment.findUniqueOrThrow({ where: { id: uploaded.body.id } }))).toMatchObject({
       removedAt: expect.any(Date),
       removalReason: 'Uploaded the wrong evidence file.',
-      removedByRequesterId: requester.id
+      removedByUserId: requester.id
     });
   });
 
   it('rejects disallowed files and attachment access by another requester', async () => {
-    const requesters = await prisma.developmentRequester.findMany({ where: { isActive: true }, take: 2 });
+    const requesters = await prisma.user.findMany({ where: { isActive: true, role: 'REQUESTER' }, take: 2 });
     const ticket = await ticketFor(requesters[0].id);
     const invalid = await upload(ticket.ticketNumber, requesters[0].id, 'notes.txt', 'text/plain');
     const otherRequester = await upload(ticket.ticketNumber, requesters[1].id);
@@ -109,7 +109,7 @@ describe('Lab 2 attachment APIs', () => {
   });
 
   it('rejects a sixth active attachment', async () => {
-    const requester = await prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } });
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const ticket = await ticketFor(requester.id);
 
     for (let index = 0; index < 5; index += 1) {
