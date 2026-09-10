@@ -25,7 +25,8 @@ async function createTestTicket(
       relatedSystemId: relatedSystem.id,
       summary,
       description: 'A complete description used to verify requester ticket ownership.',
-      requestedPriority: options.priority ?? 'MEDIUM'
+      requestedPriority: options.priority ?? 'MEDIUM',
+      itPriority: options.priority ?? 'MEDIUM'
     }
   });
 }
@@ -36,7 +37,7 @@ afterAll(async () => {
 
 describe('Lab 2 My Tickets APIs', () => {
   it('returns only the selected requester tickets with pagination metadata', async () => {
-    const requesters = await prisma.developmentRequester.findMany({ where: { isActive: true }, take: 2 });
+    const requesters = await prisma.user.findMany({ where: { isActive: true, role: 'REQUESTER' }, take: 2 });
     const marker = `Owned ticket ${Date.now()}`;
     const ownTicket = await createTestTicket(requesters[0].id, marker);
     await createTestTicket(requesters[1].id, `${marker} other requester`);
@@ -51,7 +52,7 @@ describe('Lab 2 My Tickets APIs', () => {
   });
 
   it('returns details for an owner and blocks another requester', async () => {
-    const requesters = await prisma.developmentRequester.findMany({ where: { isActive: true }, take: 2 });
+    const requesters = await prisma.user.findMany({ where: { isActive: true, role: 'REQUESTER' }, take: 2 });
     const ticket = await createTestTicket(requesters[0].id, `Detail ticket ${Date.now()}`);
 
     const ownerResponse = await request(app).get(`/api/tickets/${ticket.ticketNumber}`).set('X-Development-Requester-Id', String(requesters[0].id));
@@ -64,7 +65,7 @@ describe('Lab 2 My Tickets APIs', () => {
   });
 
   it('applies category, status, priority, and sort-direction filters together', async () => {
-    const requester = await prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } });
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const categories = await prisma.category.findMany({ where: { isActive: true }, orderBy: { id: 'asc' }, take: 2 });
     expect(categories.length).toBe(2);
     const marker = `Complete filters ${Date.now()}`;
@@ -88,7 +89,7 @@ describe('Lab 2 My Tickets APIs', () => {
   });
 
   it('returns predictable page boundaries and a no-result state', async () => {
-    const requester = await prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } });
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const marker = `Pagination boundary ${Date.now()}`;
     const created = await Promise.all(Array.from({ length: 6 }, (_, index) => (
       createTestTicket(requester.id, `${marker} ${index + 1}`)
@@ -115,7 +116,7 @@ describe('Lab 2 My Tickets APIs', () => {
   });
 
   it('rejects invalid list parameters safely', async () => {
-    const requester = await prisma.developmentRequester.findFirstOrThrow({ where: { isActive: true } });
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const response = await request(app).get('/api/tickets?page=0').set('X-Development-Requester-Id', String(requester.id));
 
     expect(response.status).toBe(400);

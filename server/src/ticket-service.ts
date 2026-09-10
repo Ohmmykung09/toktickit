@@ -86,6 +86,7 @@ export async function createTicket(
           ticketNumber,
           idempotencyKey,
           requesterId,
+          itPriority: input.requestedPriority,
           ...input
         }
       });

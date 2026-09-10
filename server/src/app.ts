@@ -75,8 +75,8 @@ app.get('/api/related-systems', async (_request, response, next) => {
 
 app.get('/api/development-requesters', async (_request, response, next) => {
   try {
-    const requesters = await prisma.developmentRequester.findMany({
-      where: { isActive: true },
+    const requesters = await prisma.user.findMany({
+      where: { isActive: true, role: 'REQUESTER' },
       orderBy: { name: 'asc' },
       select: { id: true, name: true }
     });
@@ -131,8 +131,8 @@ async function activeRequesterId(request: express.Request) {
   const requesterId = requesterIdFrom(request);
   if (!requesterId) return null;
 
-  const requester = await prisma.developmentRequester.findFirst({
-    where: { id: requesterId, isActive: true },
+  const requester = await prisma.user.findFirst({
+    where: { id: requesterId, isActive: true, role: 'REQUESTER' },
     select: { id: true }
   });
   return requester?.id ?? null;
@@ -207,8 +207,8 @@ app.post('/api/tickets', async (request, response, next) => {
 
   try {
     const [requester, category, relatedSystem] = await Promise.all([
-      prisma.developmentRequester.findFirst({
-        where: { id: requesterId, isActive: true },
+      prisma.user.findFirst({
+        where: { id: requesterId, isActive: true, role: 'REQUESTER' },
         select: { id: true }
       }),
       prisma.category.findFirst({
@@ -478,7 +478,7 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
 
     const removedAttachment = await prisma.attachment.update({
       where: { id: attachment.id },
-      data: { removedAt: new Date(), removalReason, removedByRequesterId: requesterId }
+      data: { removedAt: new Date(), removalReason, removedByUserId: requesterId }
     });
     response.status(200).json(attachmentInfo(removedAttachment));
   } catch (error) {

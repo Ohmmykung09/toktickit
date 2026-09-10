@@ -11,7 +11,7 @@ afterAll(async () => {
 describe('Lab 2 ticket detail API', () => {
   it('returns an owned ticket detail and rejects a different requester', async () => {
     const [requesters, category, relatedSystem] = await Promise.all([
-      prisma.developmentRequester.findMany({ where: { isActive: true }, take: 2, orderBy: { id: 'asc' } }),
+      prisma.user.findMany({ where: { isActive: true, role: 'REQUESTER' }, take: 2, orderBy: { id: 'asc' } }),
       prisma.category.findFirstOrThrow({ where: { isActive: true } }),
       prisma.relatedSystem.findFirstOrThrow({ where: { isActive: true } })
     ]);
@@ -25,7 +25,8 @@ describe('Lab 2 ticket detail API', () => {
         relatedSystemId: relatedSystem.id,
         summary: 'Ticket detail ownership verification',
         description: 'This ticket verifies the requester-owned detail API response.',
-        requestedPriority: 'MEDIUM'
+        requestedPriority: 'MEDIUM',
+        itPriority: 'MEDIUM'
       }
     });
 

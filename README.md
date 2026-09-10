@@ -60,7 +60,9 @@ The local client uses this API base URL:
 VITE_API_BASE_URL="http://localhost:3000"
 ```
 
-Generate Prisma, apply migrations, and load the repeatable Lab 2 seed data:
+Add `LAB3_SEED_INITIAL_PASSWORD` to the ignored `server/.env` and enter a unique local-only value containing 12 to 128 characters and at least three character classes. Do not reuse a personal password. The repository provides no default credential, and the seed fails closed when this value is absent. Passwords are stored using Argon2id, and seeded users must change the initial password when authentication is enabled.
+
+Generate Prisma, apply migrations, and load the repeatable seed data:
 
 ```powershell
 npm run prisma:generate
@@ -69,7 +71,7 @@ npm run prisma:seed
 npm run db:check
 ```
 
-The seed creates the four required categories, seven related systems, four active Development Requesters, and one inactive Development Requester. It can be run repeatedly without duplicates.
+The seed preserves the Lab 2 Requesters as authenticated Users and creates four active Requesters, one inactive Requester, three active IT Staff, one inactive IT Staff, one active Administrator, and realistic tickets covering all eight Lab 3 statuses. It retains the four categories and seven related systems and adds safe Public Comment and Internal Note fixtures. Repeat runs create missing fixtures and provision only null credential states; they do not overwrite user-managed records.
 
 ## Run Locally
 

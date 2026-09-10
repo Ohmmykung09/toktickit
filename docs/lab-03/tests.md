@@ -31,8 +31,9 @@ No test may depend on test execution order or mutate shared seed records without
 | API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-16 | API | AC-12, AC-13 | Duplicate email, initial-password reset, and session revocation | Conflict/success contracts are enforced | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-17 | API | AC-14 | Self-deactivation and last-active-Administrator protections | Atomic `409 ADMIN_SAFETY_RULE` without partial update | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| MIG-01 | Migration | AC-05 | Lab 2 Development Requesters become Users with stable ownership | Counts and Ticket/Attachment ownership match | `server/tests/lab-03/migration.integration.test.ts` | Planned |
-| MIG-02 | Migration | AC-05, AC-16 | Migration and seed repeat safety | No duplicate users/data loss; expected seed distribution | `server/tests/lab-03/migration.integration.test.ts` | Planned |
+| MIG-01 | Migration | AC-05 | Apply the actual migration history to empty and populated isolated PostgreSQL schemas | Lab 2 identity, Ticket/Attachment ownership, and IT Priority backfill remain correct | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
+| MIG-02 | Migration | AC-05, AC-16 | Seed repeat safety after editing User and lookup state | No duplicate fixtures and no user-managed state is overwritten | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
+| MIG-03 | Migration/Security | AC-01, AC-05 | Explicit provisioning, Argon2id, 12/128 password boundaries, and canonical email constraints | Missing credentials fail closed; mixed-case and duplicate canonical emails are rejected | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Planned |
 | UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Planned |
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
@@ -51,11 +52,11 @@ No test may depend on test execution order or mutate shared seed records without
 
 | Acceptance criterion | Planned evidence |
 | --- | --- |
-| AC-01 | API-01, UI-01, E2E-01 |
+| AC-01 | MIG-03, API-01, UI-01, E2E-01 |
 | AC-02 | API-02, UI-02, E2E-01 |
 | AC-03 | API-03, API-04, UI-03, E2E-01 |
 | AC-04 | API-04, API-05, UI-03 |
-| AC-05 | API-05, API-06, MIG-01, MIG-02, UI-04, E2E-02 |
+| AC-05 | API-05, API-06, MIG-01, MIG-02, MIG-03, UI-04, E2E-02 |
 | AC-06 | API-06, API-07, UI-04, E2E-02 |
 | AC-07 | API-08, API-09, UI-05, E2E-03 |
 | AC-08 | API-10, API-11, UI-06, E2E-03 |
