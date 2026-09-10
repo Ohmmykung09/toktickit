@@ -1,0 +1,104 @@
+# Lab 3 Test Plan, Traceability, and Results
+
+## 1. Test Strategy
+
+This plan is created before implementation. Lab 3 uses unit tests for pure policy and transition logic; API/integration tests for authentication, sessions, authorization, migrations, queue queries, workflow, and administration; React tests for role-specific UI behaviour; and Playwright E2E tests for complete user journeys and responsive evidence. Existing Lab 1 and Lab 2 tests remain part of regression verification.
+
+No test may depend on test execution order or mutate shared seed records without restoring them. E2E fixtures use an explicit prefix and scoped cleanup.
+
+## 2. Planned Automated Tests
+
+| Test ID | Type | Requirement / AC | What it tests | Expected result | Planned file | Final status |
+| --- | --- | --- | --- | --- | --- | --- |
+| UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Planned |
+| UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Planned |
+| UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Planned |
+| UNIT-04 | Unit | BR-20 | Comment/note trimming and length limits | Empty/oversized content fails; valid content is preserved | `server/tests/lab-03/message-policy.unit.test.ts` | Planned |
+| API-01 | API | AC-01 | Valid, invalid, inactive, unknown, and blocked login | Safe authenticated or generic failure response | `server/tests/lab-03/auth.api.test.ts` | Planned |
+| API-02 | API | AC-02 | Initial-password login and mandatory change | Normal APIs remain blocked until valid change | `server/tests/lab-03/auth.api.test.ts` | Planned |
+| API-03 | API | AC-03 | Current user, expiry, logout, revocation, and password-reset revocation | Invalid sessions cannot continue | `server/tests/lab-03/auth.api.test.ts` | Planned |
+| API-04 | Security/API | AC-03, AC-04 | Cookie, Origin, CSRF, malformed session, and role checks | Unsafe or unauthorized requests are rejected | `server/tests/lab-03/authorization.api.test.ts` | Planned |
+| API-05 | Security/API | AC-04, AC-05 | Cross-requester Ticket, Attachment, and Public Comment access | Same safe not-found response; no leakage | `server/tests/lab-03/authorization.api.test.ts` | Planned |
+| API-06 | Regression/API | AC-05, AC-06 | Authenticated Create/List/Detail/Attachment workflows | Lab 2 behaviour passes without requester header | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
+| API-07 | API | AC-06, AC-11 | Requester Public Comments and resolution indication | Owned actions succeed; formal staff actions fail | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
+| API-08 | API | AC-07 | Queue default order, search, filters, sorting, pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
+| API-09 | API | AC-07 | Invalid, repeated, empty, and out-of-range queue query values | Safe `400 INVALID_QUERY` | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
+| API-10 | API | AC-08 | Claim, unassign, active-owner assignment, and reassignment | Valid atomic ownership updates only | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
+| API-11 | API | AC-08, AC-09 | Stale assignment/priority updates and Requested Priority immutability | `409` on stale update; Requested Priority unchanged | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
+| API-12 | API | AC-10 | Every permitted and forbidden status transition | Matrix and owner requirements enforced | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
+| API-13 | API | AC-11 | Public Comment visibility and Internal Note role restriction | Requester never receives note data | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
+| API-14 | API | AC-11 | Message validation, authorship, ordering, and safe rendering data | Backend author/time; append-only ordered records | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
+| API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
+| API-16 | API | AC-12, AC-13 | Duplicate email, initial-password reset, and session revocation | Conflict/success contracts are enforced | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
+| API-17 | API | AC-14 | Self-deactivation and last-active-Administrator protections | Atomic `409 ADMIN_SAFETY_RULE` without partial update | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
+| MIG-01 | Migration | AC-05 | Lab 2 Development Requesters become Users with stable ownership | Counts and Ticket/Attachment ownership match | `server/tests/lab-03/migration.integration.test.ts` | Planned |
+| MIG-02 | Migration | AC-05, AC-16 | Migration and seed repeat safety | No duplicate users/data loss; expected seed distribution | `server/tests/lab-03/migration.integration.test.ts` | Planned |
+| UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Planned |
+| UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Planned |
+| UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
+| UI-04 | UI/Regression | AC-05, AC-06 | Requester identity, comments, resolution indication, and Lab 2 screens | No selector; owned workflow remains functional | `client/tests/lab-03/RequesterRegression.test.tsx` | Planned |
+| UI-05 | UI | AC-07 | Staff Queue data, query controls, states, pagination, and stale responses | Current query wins and all states are visible | `client/tests/lab-03/StaffTicketQueue.test.tsx` | Planned |
+| UI-06 | UI | AC-08, AC-09, AC-10 | Staff assignment, priorities, transition controls, conflicts | Only permitted controls/actions are presented | `client/tests/lab-03/StaffTicketDetail.test.tsx` | Planned |
+| UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance and access | Distinct UI; requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Planned |
+| UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/reset and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
+| E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Planned |
+| E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Planned |
+| E2E-03 | E2E | AC-07-AC-11 | Staff finds ticket, claims/reassigns, changes priority/status, comments, and notes | Full operational flow passes | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
+| E2E-04 | E2E | AC-12-AC-14 | Admin creates/edits/deactivates user, resets password, and verifies safety rules | Full administration flow passes | `e2e/lab-03/user-administration.spec.ts` | Planned |
+| E2E-05 | Responsive/A11y | AC-15 | Major screens at 1440x900, 768x1024, and 390x844 | No clipping/overlap/overflow; focus and labels visible | `e2e/lab-03/visual-evidence.spec.ts` | Planned |
+
+## 3. Acceptance-Criteria Traceability
+
+| Acceptance criterion | Planned evidence |
+| --- | --- |
+| AC-01 | API-01, UI-01, E2E-01 |
+| AC-02 | API-02, UI-02, E2E-01 |
+| AC-03 | API-03, API-04, UI-03, E2E-01 |
+| AC-04 | API-04, API-05, UI-03 |
+| AC-05 | API-05, API-06, MIG-01, MIG-02, UI-04, E2E-02 |
+| AC-06 | API-06, API-07, UI-04, E2E-02 |
+| AC-07 | API-08, API-09, UI-05, E2E-03 |
+| AC-08 | API-10, API-11, UI-06, E2E-03 |
+| AC-09 | API-11, UI-06, E2E-03 |
+| AC-10 | UNIT-03, API-12, UI-06, E2E-03 |
+| AC-11 | UNIT-04, API-07, API-13, API-14, UI-07, E2E-02, E2E-03 |
+| AC-12 | API-15, API-16, UI-08, E2E-04 |
+| AC-13 | API-03, API-16, UI-08, E2E-04 |
+| AC-14 | API-17, UI-08, E2E-04 |
+| AC-15 | E2E-05 and completed `ui-spec.md` visual checklist |
+| AC-16 | Complete final-main regression suite and the results below |
+
+## 4. Manual and Visual Checks
+
+- Confirm Public Comments and Internal Notes cannot be visually confused.
+- Confirm every role sees only its permitted navigation and direct URLs remain backend-protected.
+- Inspect Login, Change Password, Requester, Queue, Staff Detail, and User Management at all three required viewports.
+- Confirm badge text, editable/read-only treatment, focus, validation placement, dialogs, and error states.
+- Confirm no screenshot contains credentials, cookies, CSRF tokens, personal secrets, or unrelated local data.
+
+## 5. Final Verification Commands
+
+Run from final `main` after installing dependencies and preparing the documented local test database:
+
+```powershell
+npm run prisma:generate
+npm test
+npm run build
+npx playwright test e2e/lab-03
+git diff --check
+```
+
+## 6. Final Results
+
+Do not mark planned tests as passing until they run against the final integrated implementation.
+
+| Suite | Expected | Final result |
+| --- | --- | --- |
+| Unit and policy tests | All pass; none skipped | Pending |
+| API/integration and authorization tests | All pass; none skipped | Pending |
+| Lab 1 and Lab 2 regression tests | All pass; none skipped | Pending |
+| React UI component tests | All pass; none skipped | Pending |
+| Migration and seed checks | Preserve data and pass repeat run | Pending |
+| Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | Pending |
+| Client and server production build | Pass | Pending |
+| Visual checklist | Complete from final `main` | Pending |
