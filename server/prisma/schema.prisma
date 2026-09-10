@@ -16,21 +16,27 @@ model Category {
 }
 
 model User {
-  id                         Int          @id @default(autoincrement())
+  id                         Int             @id @default(autoincrement())
   name                       String
-  email                      String       @unique
-  passwordHash               String
-  role                       UserRole     @default(REQUESTER)
-  isActive                   Boolean      @default(true)
-  mustChangePassword         Boolean      @default(true)
-  failedLoginAttempts        Int          @default(0)
+  email                      String          @unique
+  passwordHash               String?
+  passwordProvisionedAt      DateTime?
+  role                       UserRole        @default(REQUESTER)
+  isActive                   Boolean         @default(true)
+  mustChangePassword         Boolean         @default(true)
+  failedLoginAttempts        Int             @default(0)
   failedLoginWindowStartedAt DateTime?
   lockedUntil                DateTime?
-  sessionVersion             Int          @default(1)
-  createdAt                  DateTime     @default(now())
-  updatedAt                  DateTime     @updatedAt
-  requestedTickets           Ticket[]     @relation("TicketRequester")
-  removedAttachments         Attachment[] @relation("AttachmentRemovedBy")
+  sessionVersion             Int             @default(1)
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  requestedTickets           Ticket[]        @relation("TicketRequester")
+  ownedTickets               Ticket[]        @relation("TicketOwner")
+  resolutionIndications      Ticket[]        @relation("TicketResolutionIndicatedBy")
+  removedAttachments         Attachment[]    @relation("AttachmentRemovedBy")
+  sessions                   Session[]
+  publicComments             PublicComment[]
+  internalNotes              InternalNote[]
 
   @@index([isActive, role, name])
 }
@@ -46,25 +52,74 @@ model RelatedSystem {
 }
 
 model Ticket {
-  id                Int               @id @default(autoincrement())
-  ticketNumber      String            @unique
-  idempotencyKey    String
-  requesterId       Int
-  categoryId        Int
-  relatedSystemId   Int
-  summary           String
-  requestedPriority RequestedPriority
-  description       String
-  status            TicketStatus      @default(NEW)
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  requester         User              @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Restrict)
-  category          Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  relatedSystem     RelatedSystem     @relation(fields: [relatedSystemId], references: [id], onDelete: Restrict)
-  attachments       Attachment[]
+  id                               Int               @id @default(autoincrement())
+  ticketNumber                     String            @unique
+  idempotencyKey                   String
+  requesterId                      Int
+  ownerId                          Int?
+  categoryId                       Int
+  relatedSystemId                  Int
+  summary                          String
+  requestedPriority                RequestedPriority
+  itPriority                       RequestedPriority
+  description                      String
+  status                           TicketStatus      @default(NEW)
+  requesterResolutionIndicatedAt   DateTime?
+  requesterResolutionIndicatedById Int?
+  createdAt                        DateTime          @default(now())
+  updatedAt                        DateTime          @updatedAt
+  requester                        User              @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  owner                            User?             @relation("TicketOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  requesterResolutionIndicatedBy   User?             @relation("TicketResolutionIndicatedBy", fields: [requesterResolutionIndicatedById], references: [id], onDelete: SetNull)
+  category                         Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  relatedSystem                    RelatedSystem     @relation(fields: [relatedSystemId], references: [id], onDelete: Restrict)
+  attachments                      Attachment[]
+  publicComments                   PublicComment[]
+  internalNotes                    InternalNote[]
 
   @@unique([requesterId, idempotencyKey])
   @@index([requesterId, updatedAt])
+  @@index([ownerId, status, updatedAt])
+  @@index([status, itPriority, updatedAt])
+}
+
+model Session {
+  id            Int       @id @default(autoincrement())
+  userId        Int
+  tokenHash     String    @unique
+  csrfTokenHash String
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt, id])
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  authorId  Int
+  content   String
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt, id])
 }
 
 model Attachment {
@@ -86,6 +141,13 @@ model Attachment {
 
 enum TicketStatus {
   NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_REQUESTER
+  RESOLVED
+  CLOSED
+  REOPENED
+  CANCELLED
 }
 
 enum RequestedPriority {

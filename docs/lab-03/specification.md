@@ -64,8 +64,8 @@ TokTickIT must identify each user from a secure authenticated session instead of
 | --- | --- |
 | BR-01 | Only an active user with valid credentials may authenticate. Login failure messages do not reveal whether an email exists, is inactive, is temporarily locked, or has the wrong password. |
 | BR-02 | Email identity is trimmed and stored in lowercase. Its maximum length is 254 characters and it is unique case-insensitively. |
-| BR-03 | Passwords are never stored or logged in plaintext. They are hashed with bcrypt using cost 12. |
-| BR-04 | A valid password contains 12 to 72 characters and at least three of uppercase, lowercase, digit, and symbol character classes. It must not equal the normalized email address. |
+| BR-03 | Passwords are never stored or logged in plaintext. They are hashed with Argon2id using 19,456 KiB memory, two iterations, and parallelism one. |
+| BR-04 | A valid password contains 12 to 128 characters and at least three of uppercase, lowercase, digit, and symbol character classes. It must not equal the normalized email address. |
 | BR-05 | Five failed login attempts within 15 minutes temporarily block further attempts for 15 minutes. A successful login resets the counters; the response remains generic. |
 | BR-06 | A user marked `mustChangePassword` cannot access normal application APIs or screens. Only current-user, change-password, and logout operations are permitted. |
 | BR-07 | A changed password must differ from the current password. Changing or administratively resetting a password revokes all existing sessions for that user. |
@@ -143,7 +143,7 @@ Indexes support normalized email lookup, active users by role/name, session toke
 
 1. Create role/session/comment/note structures and add nullable Lab 3 Ticket fields.
 2. Create one `REQUESTER` User for every Development Requester while preserving stable IDs where possible.
-3. Hash a documented local-only initial password for migrated Requesters and set `mustChangePassword = true`.
+3. Leave migrated accounts explicitly unprovisioned with a null password hash. Provision them only when the seed receives an explicit local-only password through the ignored environment, then set `mustChangePassword = true`.
 4. Backfill Ticket requester ownership and Attachment remover references to User.
 5. Copy Requested Priority into IT Priority and retain the existing `NEW` status.
 6. Add foreign keys, uniqueness, and non-null constraints only after validation queries pass.
@@ -157,7 +157,8 @@ The migration must run without deleting existing Categories, Related Systems, Ti
 - Include at least four active and one inactive Requester, three active and one inactive IT Staff, and one active Administrator.
 - Include assigned and unassigned tickets across all required statuses and priority levels.
 - Include safe example Public Comments and Internal Notes.
-- Seed credentials are local-only examples documented outside production configuration. No real password or secret is committed.
+- Seed credentials are supplied explicitly through ignored local configuration. The seed fails before database work when the value is absent, and no usable default password or real secret is committed.
+- Repeat runs create only missing fixtures and provision only accounts whose credential state is still null. Existing names, roles, activation state, hashes, password-change state, and login-attempt state are preserved.
 
 ## 9. UI Summary
 

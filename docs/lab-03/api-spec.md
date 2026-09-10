@@ -17,6 +17,7 @@
 
 Public. Accepts `{ "email": string, "password": string }`.
 
+- Password inputs contain 12 to 128 characters and at least three of the uppercase, lowercase, digit, and symbol classes. Stored hashes use the Argon2id parameters in `specification.md`.
 - `200 OK`: sets the session cookie and returns `{ "user": PublicUser, "mustChangePassword": boolean, "csrfToken": string }`.
 - `400 VALIDATION_ERROR`: malformed body or field bounds.
 - `401 INVALID_CREDENTIALS`: wrong, inactive, unknown, or temporarily blocked account using the same safe message.

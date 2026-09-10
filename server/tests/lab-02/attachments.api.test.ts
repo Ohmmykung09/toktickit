@@ -19,7 +19,8 @@ async function ticketFor(requesterId: number) {
       relatedSystemId: relatedSystem.id,
       summary: `Attachment test ${key.slice(0, 8)}`,
       description: 'A complete description used to validate attachment workflows.',
-      requestedPriority: 'LOW'
+      requestedPriority: 'LOW',
+      itPriority: 'LOW'
     }
   });
 }

@@ -25,7 +25,8 @@ describe('Lab 2 ticket detail API', () => {
         relatedSystemId: relatedSystem.id,
         summary: 'Ticket detail ownership verification',
         description: 'This ticket verifies the requester-owned detail API response.',
-        requestedPriority: 'MEDIUM'
+        requestedPriority: 'MEDIUM',
+        itPriority: 'MEDIUM'
       }
     });
 

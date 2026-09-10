@@ -1,13 +1,16 @@
 import '../src/env.js';
 import { PrismaClient } from '@prisma/client';
-import { seedDatabase } from '../src/seed-data.js';
+import { requireConfiguredInitialPassword, seedDatabase } from '../src/seed-data.js';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const initialPassword = process.env.LAB3_SEED_INITIAL_PASSWORD ?? 'ChangeMe123!';
+  const initialPassword = requireConfiguredInitialPassword(process.env.LAB3_SEED_INITIAL_PASSWORD);
   const result = await seedDatabase(prisma, initialPassword);
-  console.log(`Seeded ${result.categories} categories, ${result.relatedSystems} related systems, and ${result.users} users.`);
+  console.log(
+    `Seeded ${result.categories} categories, ${result.relatedSystems} related systems, ` +
+      `${result.users} users, and ${result.tickets} tickets. Provisioned ${result.provisionedUsers} users.`
+  );
 }
 
 main()

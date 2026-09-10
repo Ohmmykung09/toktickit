@@ -25,7 +25,8 @@ async function createTestTicket(
       relatedSystemId: relatedSystem.id,
       summary,
       description: 'A complete description used to verify requester ticket ownership.',
-      requestedPriority: options.priority ?? 'MEDIUM'
+      requestedPriority: options.priority ?? 'MEDIUM',
+      itPriority: options.priority ?? 'MEDIUM'
     }
   });
 }
