@@ -45,5 +45,5 @@ Each implementation increment was developed on a feature branch, submitted throu
 
 - [x] Add the integration PR URL that brings the approved stacked feature work into `lab2-staging`.
 - [x] Add the release PR URL from `lab2-staging` to `main`.
-- [ ] Add reviewer full name and student ID when available.
+- [ ] Add reviewer full naฟme and student ID when available.
 - [x] Record any final review comments and their resolution.
