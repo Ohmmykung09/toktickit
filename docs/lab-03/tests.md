@@ -10,13 +10,13 @@ No test may depend on test execution order or mutate shared seed records without
 
 | Test ID | Type | Requirement / AC | What it tests | Expected result | Planned file | Final status |
 | --- | --- | --- | --- | --- | --- | --- |
-| UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Planned |
-| UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Planned |
+| UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
+| UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
 | UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Planned |
 | UNIT-04 | Unit | BR-20 | Comment/note trimming and length limits | Empty/oversized content fails; valid content is preserved | `server/tests/lab-03/message-policy.unit.test.ts` | Planned |
-| API-01 | API | AC-01 | Valid, invalid, inactive, unknown, and blocked login | Safe authenticated or generic failure response | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| API-02 | API | AC-02 | Initial-password login and mandatory change | Normal APIs remain blocked until valid change | `server/tests/lab-03/auth.api.test.ts` | Planned |
-| API-03 | API | AC-03 | Current user, expiry, logout, revocation, and password-reset revocation | Invalid sessions cannot continue | `server/tests/lab-03/auth.api.test.ts` | Planned |
+| API-01 | API | AC-01 | Valid, invalid, inactive, unknown, and blocked login | Safe authenticated or generic failure response | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
+| API-02 | API | AC-02 | Initial-password login and mandatory change | Normal APIs remain blocked until valid change | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
+| API-03 | API | AC-03 | Current user, expiry, logout, revocation, and password-reset revocation | Invalid sessions cannot continue | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
 | API-04 | Security/API | AC-03, AC-04 | Cookie, Origin, CSRF, malformed session, and role checks | Unsafe or unauthorized requests are rejected | `server/tests/lab-03/authorization.api.test.ts` | Planned |
 | API-05 | Security/API | AC-04, AC-05 | Cross-requester Ticket, Attachment, and Public Comment access | Same safe not-found response; no leakage | `server/tests/lab-03/authorization.api.test.ts` | Planned |
 | API-06 | Regression/API | AC-05, AC-06 | Authenticated Create/List/Detail/Attachment workflows | Lab 2 behaviour passes without requester header | `server/tests/lab-03/requester-regression.api.test.ts` | Planned |
@@ -34,8 +34,8 @@ No test may depend on test execution order or mutate shared seed records without
 | MIG-01 | Migration | AC-05 | Apply the actual migration history to empty and populated isolated PostgreSQL schemas | Lab 2 identity, Ticket/Attachment ownership, and IT Priority backfill remain correct | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-02 | Migration | AC-05, AC-16 | Seed repeat safety after editing User and lookup state | No duplicate fixtures and no user-managed state is overwritten | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-03 | Migration/Security | AC-01, AC-05 | Explicit provisioning, Argon2id, 12/128 password boundaries, and canonical email constraints | Missing credentials fail closed; mixed-case and duplicate canonical emails are rejected | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
-| UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Planned |
-| UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Planned |
+| UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Passed on Issue #28 branch |
+| UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Passed on Issue #28 branch |
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
 | UI-04 | UI/Regression | AC-05, AC-06 | Requester identity, comments, resolution indication, and Lab 2 screens | No selector; owned workflow remains functional | `client/tests/lab-03/RequesterRegression.test.tsx` | Planned |
 | UI-05 | UI | AC-07 | Staff Queue data, query controls, states, pagination, and stale responses | Current query wins and all states are visible | `client/tests/lab-03/StaffTicketQueue.test.tsx` | Planned |

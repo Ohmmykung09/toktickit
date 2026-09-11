@@ -1,8 +1,8 @@
 # TokTickIT
 
-TokTickIT is a full-stack requester-facing IT support ticketing MVP for CPE 334 Lab 2. A Development Requester selects a temporary test identity, creates and owns tickets, finds them in My Tickets, opens ticket details, and manages permitted attachments.
+TokTickIT is a full-stack IT service desk application for CPE 334. Lab 3 adds authenticated Requester, IT Staff, and Administrator accounts while preserving the completed Lab 2 ticket and attachment workflows.
 
-The Development Requester selector is a Lab 2 testing mechanism only. It is not authentication and does not implement passwords, sessions, tokens, or user roles.
+Authentication uses an expiring server-side session in an `HttpOnly` cookie. Seeded local users must replace their explicitly configured initial password before entering the application. The temporary Lab 2 requester selector remains inside the authenticated shell until the requester-authorization work is completed in the next Lab 3 issue.
 
 ## Technology
 
@@ -23,9 +23,10 @@ The Development Requester selector is a Lab 2 testing mechanism only. It is not 
 toktickit/
 |- client/                       React requester application
 |- server/                       Express API and Prisma schema
-|- docs/lab-02/                  Engineering contract and delivery records
-|- e2e/lab-02/                   Browser workflow specification
-`- artifacts/lab-02/screenshots/ Final screenshot evidence locations
+|- docs/lab-02/                  Lab 2 engineering and delivery records
+|- docs/lab-03/                  Lab 3 engineering contract and test plan
+|- e2e/                          Browser workflow specifications
+`- artifacts/                    Final screenshot evidence locations
 ```
 
 ## Local Setup
@@ -60,7 +61,7 @@ The local client uses this API base URL:
 VITE_API_BASE_URL="http://localhost:3000"
 ```
 
-Add `LAB3_SEED_INITIAL_PASSWORD` to the ignored `server/.env` and enter a unique local-only value containing 12 to 128 characters and at least three character classes. Do not reuse a personal password. The repository provides no default credential, and the seed fails closed when this value is absent. Passwords are stored using Argon2id, and seeded users must change the initial password when authentication is enabled.
+Add `LAB3_SEED_INITIAL_PASSWORD` to the ignored `server/.env` and enter a unique local-only value containing 12 to 128 characters and at least three character classes. Do not reuse a personal password. The repository provides no default credential, and the seed fails closed when this value is absent. Passwords are stored using Argon2id, and seeded users must change the initial password at first login.
 
 Generate Prisma, apply migrations, and load the repeatable seed data:
 

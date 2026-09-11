@@ -12,6 +12,7 @@ import {
   IdempotencyConflictError,
   type CreateTicketInput
 } from './ticket-service.js';
+import { authRouter, blockForcedPasswordChange } from './auth-router.js';
 
 export const app = express();
 
@@ -28,10 +29,15 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: max
 
 app.use(
   cors({
-    origin: env.clientOrigin
+    origin: env.clientOrigin,
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Idempotency-Key', 'X-CSRF-Token', 'X-Development-Requester-Id']
   })
 );
 app.use(express.json());
+
+app.use('/api/auth', authRouter);
+app.use('/api', blockForcedPasswordChange);
 
 app.get('/api/health', (_request, response) => {
   response.status(200).json({
