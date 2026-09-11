@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { authenticatedRequest } from '../authenticated-request.js';
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -29,11 +29,12 @@ describe('Lab 2 ticket detail API', () => {
         itPriority: 'MEDIUM'
       }
     });
+    const api = await authenticatedRequest(app, owner.id);
 
-    const ownerResponse = await request(app)
+    const ownerResponse = await api
       .get(`/api/tickets/${ticket.ticketNumber}`)
       .set('X-Development-Requester-Id', String(owner.id));
-    const otherResponse = await request(app)
+    const otherResponse = await api
       .get(`/api/tickets/${ticket.ticketNumber}`)
       .set('X-Development-Requester-Id', String(otherRequester.id));
 

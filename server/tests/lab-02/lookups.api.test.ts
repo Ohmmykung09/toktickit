@@ -1,7 +1,7 @@
-import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { authenticatedRequest } from '../authenticated-request.js';
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -9,7 +9,8 @@ afterAll(async () => {
 
 describe('Lab 2 lookup APIs', () => {
   it('returns active related systems ordered by name', async () => {
-    const response = await request(app).get('/api/related-systems');
+    const api = await authenticatedRequest(app);
+    const response = await api.get('/api/related-systems');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([
@@ -24,7 +25,8 @@ describe('Lab 2 lookup APIs', () => {
   });
 
   it('returns active development requesters and excludes inactive ones', async () => {
-    const response = await request(app).get('/api/development-requesters');
+    const api = await authenticatedRequest(app);
+    const response = await api.get('/api/development-requesters');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([

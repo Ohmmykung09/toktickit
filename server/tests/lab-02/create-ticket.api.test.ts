@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { authenticatedRequest } from '../authenticated-request.js';
 
 async function ticketContext() {
   const [requester, category, relatedSystem] = await Promise.all([
@@ -31,7 +31,8 @@ afterAll(async () => {
 describe('Lab 2 create ticket API', () => {
   it('creates a New ticket for the selected active requester', async () => {
     const { requester, category, relatedSystem } = await ticketContext();
-    const response = await request(app)
+    const api = await authenticatedRequest(app, requester.id);
+    const response = await api
       .post('/api/tickets')
       .set('X-Development-Requester-Id', String(requester.id))
       .set('Idempotency-Key', randomUUID())
@@ -63,11 +64,12 @@ describe('Lab 2 create ticket API', () => {
     });
     const key = randomUUID();
     const ticket = validTicket(category.id, relatedSystem.id, `Printer request ${Date.now()}`);
+    const api = await authenticatedRequest(app, requester.id);
 
-    const first = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
-    const retry = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
-    const conflict = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send({ ...ticket, summary: 'Different printer request' });
-    const otherRequesterTicket = await request(app).post('/api/tickets').set('X-Development-Requester-Id', String(otherRequester.id)).set('Idempotency-Key', key).send(ticket);
+    const first = await api.post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
+    const retry = await api.post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send(ticket);
+    const conflict = await api.post('/api/tickets').set('X-Development-Requester-Id', String(requester.id)).set('Idempotency-Key', key).send({ ...ticket, summary: 'Different printer request' });
+    const otherRequesterTicket = await api.post('/api/tickets').set('X-Development-Requester-Id', String(otherRequester.id)).set('Idempotency-Key', key).send(ticket);
 
     expect(first.status).toBe(201);
     expect(retry.status).toBe(200);
@@ -85,13 +87,14 @@ describe('Lab 2 create ticket API', () => {
     const inactiveRequester = await prisma.user.findFirstOrThrow({
       where: { isActive: false, role: 'REQUESTER' }
     });
-    const response = await request(app).post('/api/tickets').send({ summary: 'Bad' });
-    const inactiveRequesterResponse = await request(app)
+    const api = await authenticatedRequest(app, requester.id);
+    const response = await api.post('/api/tickets').send({ summary: 'Bad' });
+    const inactiveRequesterResponse = await api
       .post('/api/tickets')
       .set('X-Development-Requester-Id', String(inactiveRequester.id))
       .set('Idempotency-Key', randomUUID())
       .send(validTicket(category.id, relatedSystem.id));
-    const invalidLookupResponse = await request(app)
+    const invalidLookupResponse = await api
       .post('/api/tickets')
       .set('X-Development-Requester-Id', String(requester.id))
       .set('Idempotency-Key', randomUUID())

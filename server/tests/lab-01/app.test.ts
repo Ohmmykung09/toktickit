@@ -2,6 +2,7 @@ import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { authenticatedRequest } from '../authenticated-request.js';
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -29,7 +30,8 @@ describe('TokTickIT API foundation', () => {
   });
 
   it('returns the seeded request categories', async () => {
-    const response = await request(app).get('/api/categories');
+    const api = await authenticatedRequest(app);
+    const response = await api.get('/api/categories');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual([

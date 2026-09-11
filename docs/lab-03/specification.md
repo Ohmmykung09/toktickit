@@ -69,7 +69,7 @@ TokTickIT must identify each user from a secure authenticated session instead of
 | BR-05 | Five failed login attempts within 15 minutes temporarily block further attempts for 15 minutes. A successful login resets the counters; the response remains generic. |
 | BR-06 | A user marked `mustChangePassword` cannot access normal application APIs or screens. Only current-user, change-password, and logout operations are permitted. |
 | BR-07 | A changed password must differ from the current password. Changing or administratively resetting a password revokes all existing sessions for that user. |
-| BR-08 | Session tokens are random, stored only as hashes in PostgreSQL, delivered through an `HttpOnly` cookie, and expire after eight hours. Logout revokes the server session and clears the cookie. |
+| BR-08 | Session tokens are random, stored only as hashes in PostgreSQL, bound to the user's current session version, delivered through an `HttpOnly` cookie, and expire after eight hours. Logout revokes the server session and clears the cookie. |
 | BR-09 | State-changing cookie-authenticated requests require both an approved Origin and a session-bound CSRF token. |
 | BR-10 | Each user has exactly one role: `REQUESTER`, `IT_STAFF`, or `ADMINISTRATOR`. Unknown role values are rejected. |
 | BR-11 | Backend authorization is authoritative. Hidden or disabled frontend controls do not grant or enforce access. |
@@ -131,7 +131,7 @@ Only IT Staff and Administrators may perform these transitions. A transition to 
 ### Models and fields
 
 - `User`: ID, name, normalized unique email, password hash, role, active flag, mandatory-password-change flag, failed-login counters, optional lock expiry, timestamps, and session version.
-- `Session`: hashed random token, hashed CSRF token, User relation, expiry, optional revocation time, created time, and last-used time.
+- `Session`: hashed random token, hashed CSRF token, User relation, captured session version, expiry, optional revocation time, created time, and last-used time.
 - `Ticket`: Requester User relation, optional owner User relation, Requested Priority, IT Priority, expanded status enum, optional requester-resolution indication fields, and existing Lab 2 fields.
 - `PublicComment`: Ticket, author User, content, and backend creation time.
 - `InternalNote`: Ticket, author User, content, and backend creation time.

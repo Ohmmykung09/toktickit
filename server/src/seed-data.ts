@@ -1,15 +1,13 @@
-import { argon2id, hash } from 'argon2';
 import type { PrismaClient, RequestedPriority, TicketStatus, UserRole } from '@prisma/client';
+import {
+  argon2idOptions,
+  hashPassword,
+  maximumPasswordLength,
+  minimumPasswordLength,
+  passwordValidationError
+} from './auth-policy.js';
 
-export const minimumPasswordLength = 12;
-export const maximumPasswordLength = 128;
-
-export const argon2idOptions = {
-  type: argon2id,
-  memoryCost: 19_456,
-  timeCost: 2,
-  parallelism: 1
-} as const;
+export { argon2idOptions, maximumPasswordLength, minimumPasswordLength };
 
 export const categoryNames = [
   'Account and Access',
@@ -157,22 +155,8 @@ const seedTickets: ReadonlyArray<{
 ];
 
 export function assertValidInitialPassword(password: string) {
-  if (password.length < minimumPasswordLength || password.length > maximumPasswordLength) {
-    throw new Error(
-      `LAB3_SEED_INITIAL_PASSWORD must contain ${minimumPasswordLength} to ${maximumPasswordLength} characters.`
-    );
-  }
-
-  const characterClasses = [
-    /[a-z]/.test(password),
-    /[A-Z]/.test(password),
-    /[0-9]/.test(password),
-    /[^A-Za-z0-9]/.test(password)
-  ].filter(Boolean).length;
-
-  if (characterClasses < 3) {
-    throw new Error('LAB3_SEED_INITIAL_PASSWORD must use at least three character classes.');
-  }
+  const validationError = passwordValidationError(password);
+  if (validationError) throw new Error(`LAB3_SEED_INITIAL_PASSWORD: ${validationError}`);
 }
 
 export function requireConfiguredInitialPassword(password: string | undefined) {
@@ -187,7 +171,7 @@ export function requireConfiguredInitialPassword(password: string | undefined) {
 
 export async function hashInitialPassword(password: string) {
   assertValidInitialPassword(password);
-  return hash(password, argon2idOptions);
+  return hashPassword(password);
 }
 
 export async function seedDatabase(prisma: PrismaClient, initialPassword: string) {
