@@ -23,17 +23,4 @@ describe('Lab 2 lookup APIs', () => {
       { id: expect.any(Number), name: 'VPN' }
     ]);
   });
-
-  it('returns active development requesters and excludes inactive ones', async () => {
-    const api = await authenticatedRequest(app);
-    const response = await api.get('/api/development-requesters');
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual([
-      { id: expect.any(Number), name: 'Aom S.' },
-      { id: expect.any(Number), name: 'Beam K.' },
-      { id: expect.any(Number), name: 'Mew P.' },
-      { id: expect.any(Number), name: 'Nok T.' }
-    ]);
-  });
 });

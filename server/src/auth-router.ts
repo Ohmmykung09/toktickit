@@ -1,4 +1,5 @@
 import express from 'express';
+import { type UserRole } from '@prisma/client';
 import { env } from './env.js';
 import {
   AuthError,
@@ -63,6 +64,12 @@ function sendAuthError(response: express.Response, error: unknown) {
 
 function approvedOrigin(request: express.Request) {
   return request.header('origin') === env.clientOrigin;
+}
+
+function sendForbidden(response: express.Response) {
+  response.status(403).json({
+    error: { code: 'FORBIDDEN', message: 'You do not have permission to perform this action.' }
+  });
 }
 
 function sendSession(response: express.Response, result: Awaited<ReturnType<typeof login>>) {
@@ -177,4 +184,49 @@ export async function requireAuthenticatedSession(
   } catch (error) {
     next(error);
   }
+}
+
+export function requireRole(...roles: UserRole[]) {
+  return (request: express.Request, response: express.Response, next: express.NextFunction) => {
+    if (!request.auth || !roles.includes(request.auth.user.role)) {
+      sendForbidden(response);
+      return;
+    }
+    next();
+  };
+}
+
+export function rejectDevelopmentRequesterHeader(
+  request: express.Request,
+  response: express.Response,
+  next: express.NextFunction
+) {
+  if (request.header('X-Development-Requester-Id')) {
+    response.status(400).json({
+      error: {
+        code: 'LEGACY_IDENTITY_REJECTED',
+        message: 'Requester identity is determined by the authenticated session.'
+      }
+    });
+    return;
+  }
+  next();
+}
+
+export function requireMutationCsrf(
+  request: express.Request,
+  response: express.Response,
+  next: express.NextFunction
+) {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+    next();
+    return;
+  }
+  if (!request.auth || !approvedOrigin(request) || !csrfMatches(request.auth, request.header('X-CSRF-Token'))) {
+    response.status(403).json({
+      error: { code: 'CSRF_REJECTED', message: 'The request could not be verified.' }
+    });
+    return;
+  }
+  next();
 }

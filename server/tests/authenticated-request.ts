@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Express } from 'express';
-import request from 'supertest';
+import request, { type Test } from 'supertest';
 import { prisma } from '../src/db.js';
+import { env } from '../src/env.js';
 
 function digest(value: string) {
   return createHash('sha256').update(value).digest('hex');
@@ -29,11 +30,18 @@ export async function authenticatedRequest(app: Express, userId?: number) {
     }
   });
   const cookie = `toktickit_session=${sessionToken}.${csrfToken}`;
+  const protectMutation = <T extends Test>(test: T) => test
+    .set('Cookie', cookie)
+    .set('Origin', env.clientOrigin)
+    .set('X-CSRF-Token', csrfToken);
 
   return {
     get: (path: string) => request(app).get(path).set('Cookie', cookie),
-    post: (path: string) => request(app).post(path).set('Cookie', cookie),
-    delete: (path: string) => request(app).delete(path).set('Cookie', cookie),
-    patch: (path: string) => request(app).patch(path).set('Cookie', cookie)
+    post: (path: string) => protectMutation(request(app).post(path)),
+    delete: (path: string) => protectMutation(request(app).delete(path)),
+    patch: (path: string) => protectMutation(request(app).patch(path)),
+    cookie,
+    csrfToken,
+    user
   };
 }

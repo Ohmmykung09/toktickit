@@ -1,15 +1,24 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import {
+  createContext,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState
+} from 'react';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
-type PublicUser = {
+export type PublicUser = {
   id: number;
   name: string;
   email: string;
   role: 'REQUESTER' | 'IT_STAFF' | 'ADMINISTRATOR';
 };
 
-type AuthPayload = {
+export type AuthPayload = {
   user: PublicUser;
   mustChangePassword: boolean;
   csrfToken: string;
@@ -19,6 +28,37 @@ type AuthState =
   | { status: 'loading' }
   | { status: 'signed-out' }
   | { status: 'signed-in'; payload: AuthPayload };
+
+type AuthContextValue = {
+  user: PublicUser;
+  csrfToken: string;
+  authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used inside an authenticated session.');
+  return context;
+}
+
+export function AuthenticatedProvider({ payload, children }: { payload: AuthPayload; children: ReactNode }) {
+  const authenticatedFetch = useCallback((input: RequestInfo | URL, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers);
+    if (!['GET', 'HEAD', 'OPTIONS'].includes((init.method ?? 'GET').toUpperCase())) {
+      headers.set('X-CSRF-Token', payload.csrfToken);
+    }
+    return fetch(input, { ...init, credentials: 'include', headers });
+  }, [payload.csrfToken]);
+  const value = useMemo(() => ({
+    user: payload.user,
+    csrfToken: payload.csrfToken,
+    authenticatedFetch
+  }), [authenticatedFetch, payload.csrfToken, payload.user]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 
 async function authErrorMessage(response: Response) {
   try {
@@ -206,12 +246,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="authenticated-shell">
-      <div className="auth-userbar">
-        <div><strong>{payload.user.name}</strong><span>{roleLabel(payload.user.role)}</span></div>
-        <button className="btn btn-outline-success btn-sm" onClick={signOut} type="button">Log out</button>
+    <AuthenticatedProvider payload={payload}>
+      <div className="authenticated-shell">
+        <div className="auth-userbar">
+          <div><strong>{payload.user.name}</strong><span>{roleLabel(payload.user.role)}</span></div>
+          <button className="btn btn-outline-success btn-sm" onClick={signOut} type="button">Log out</button>
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
+    </AuthenticatedProvider>
   );
 }
