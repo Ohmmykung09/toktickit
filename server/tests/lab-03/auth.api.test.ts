@@ -13,7 +13,8 @@ const migrationFiles = [
   new URL('../../prisma/migrations/20260814144249_create_category/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260822000000_lab2_ticket_foundation/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260901000000_lab2_review_fixes/migration.sql', import.meta.url),
-  new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url)
+  new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url),
+  new URL('../../prisma/migrations/20260911100000_bind_session_version/migration.sql', import.meta.url)
 ];
 
 let app: Express;
@@ -22,6 +23,7 @@ let adminDatabase: PrismaClient;
 let schema: string;
 let originalDatabaseUrl: string | undefined;
 let appDatabase: PrismaClient;
+let setAuthenticationTestHooksForTesting: typeof import('../../src/auth-service.js').setAuthenticationTestHooksForTesting;
 
 function schemaUrl(databaseUrl: string, schemaName: string) {
   const url = new URL(databaseUrl);
@@ -58,8 +60,10 @@ beforeAll(async () => {
 
   const appModule = await import('../../src/app.js');
   const databaseModule = await import('../../src/db.js');
+  const authServiceModule = await import('../../src/auth-service.js');
   app = appModule.app;
   appDatabase = databaseModule.prisma;
+  setAuthenticationTestHooksForTesting = authServiceModule.setAuthenticationTestHooksForTesting;
 });
 
 afterAll(async () => {
@@ -75,6 +79,15 @@ async function signIn(agent: ReturnType<typeof request.agent>, email: string, pa
 }
 
 describe('Lab 3 authentication API', () => {
+  it('rejects anonymous access before a protected handler is reached', async () => {
+    const response = await request(app).get('/api/categories');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({
+      error: { code: 'UNAUTHENTICATED', message: 'Authentication is required.' }
+    });
+  });
+
   it('creates an opaque session and returns only allowlisted user data', async () => {
     const agent = request.agent(app);
     const response = await signIn(agent, '  AOM@EXAMPLE.TEST  ');
@@ -117,9 +130,10 @@ describe('Lab 3 authentication API', () => {
     expect(resetUser.failedLoginWindowStartedAt).toBeNull();
     expect(resetUser.lockedUntil).toBeNull();
 
-    for (let count = 0; count < 5; count += 1) {
-      expect((await signIn(request.agent(app), 'mew@example.test', 'WrongPassword!2026')).status).toBe(401);
-    }
+    const concurrentFailures = await Promise.all(
+      Array.from({ length: 5 }, () => signIn(request.agent(app), 'mew@example.test', 'WrongPassword!2026'))
+    );
+    expect(concurrentFailures.map((response) => response.status)).toEqual([401, 401, 401, 401, 401]);
     const lockedUser = await database.user.findUniqueOrThrow({ where: { email: 'mew@example.test' } });
     expect(lockedUser.failedLoginAttempts).toBe(5);
     expect(lockedUser.lockedUntil).toBeInstanceOf(Date);
@@ -160,6 +174,14 @@ describe('Lab 3 authentication API', () => {
     expect((await request(app).get('/api/auth/me').set('Cookie', 'toktickit_session=malformed')).status).toBe(401);
     expect((await request(app).get('/api/auth/me').set('Cookie', 'toktickit_session=%ZZ')).status).toBe(401);
 
+    const staleVersionAgent = request.agent(app);
+    const staleVersionLogin = await signIn(staleVersionAgent, 'mint.it@example.test');
+    await database.user.update({
+      where: { id: staleVersionLogin.body.user.id },
+      data: { sessionVersion: { increment: 1 } }
+    });
+    expect((await staleVersionAgent.get('/api/auth/me')).status).toBe(401);
+
     const agent = request.agent(app);
     const activeLogin = await signIn(agent, 'ploy.it@example.test');
     const logoutResponse = await agent
@@ -169,5 +191,51 @@ describe('Lab 3 authentication API', () => {
     expect(logoutResponse.status).toBe(204);
     expect((await agent.get('/api/auth/me')).status).toBe(401);
     expect((await agent.post('/api/auth/logout')).status).toBe(204);
+  });
+
+  it('does not publish a stale session when the password changes during login', async () => {
+    const email = 'admin@example.test';
+    const changer = request.agent(app);
+    const initialLogin = await signIn(changer, email);
+    const userId = initialLogin.body.user.id as number;
+    let signalVerified!: () => void;
+    let releaseLogin!: () => void;
+    const verified = new Promise<void>((resolve) => { signalVerified = resolve; });
+    const release = new Promise<void>((resolve) => { releaseLogin = resolve; });
+
+    setAuthenticationTestHooksForTesting({
+      afterPasswordVerified: async (verifiedUserId) => {
+        if (verifiedUserId !== userId) return;
+        signalVerified();
+        await release;
+      }
+    });
+
+    try {
+      const racingAgent = request.agent(app);
+      const racingLogin = signIn(racingAgent, email);
+      await verified;
+
+      const changed = await changer
+        .post('/api/auth/change-password')
+        .set('Origin', origin)
+        .set('X-CSRF-Token', initialLogin.body.csrfToken)
+        .send({ currentPassword: initialPassword, newPassword: 'AdminPrivate!2026' });
+      expect(changed.status).toBe(200);
+
+      releaseLogin();
+      const staleLogin = await racingLogin;
+      expect(staleLogin.status).toBe(401);
+      expect(staleLogin.body.error.code).toBe('INVALID_CREDENTIALS');
+
+      const user = await database.user.findUniqueOrThrow({ where: { id: userId } });
+      const activeSessions = await database.session.findMany({ where: { userId, revokedAt: null } });
+      expect(activeSessions).toHaveLength(1);
+      expect(activeSessions[0].sessionVersion).toBe(user.sessionVersion);
+      expect((await racingAgent.get('/api/auth/me')).status).toBe(401);
+    } finally {
+      releaseLogin();
+      setAuthenticationTestHooksForTesting({});
+    }
   });
 });

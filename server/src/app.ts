@@ -12,7 +12,11 @@ import {
   IdempotencyConflictError,
   type CreateTicketInput
 } from './ticket-service.js';
-import { authRouter, blockForcedPasswordChange } from './auth-router.js';
+import {
+  authRouter,
+  blockForcedPasswordChange,
+  requireAuthenticatedSession
+} from './auth-router.js';
 
 export const app = express();
 
@@ -37,7 +41,6 @@ app.use(
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
-app.use('/api', blockForcedPasswordChange);
 
 app.get('/api/health', (_request, response) => {
   response.status(200).json({
@@ -45,6 +48,8 @@ app.get('/api/health', (_request, response) => {
     service: 'TokTickIT API'
   });
 });
+
+app.use('/api', requireAuthenticatedSession, blockForcedPasswordChange);
 
 app.get('/api/categories', async (_request, response, next) => {
   try {

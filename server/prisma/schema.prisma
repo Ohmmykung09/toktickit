@@ -84,15 +84,16 @@ model Ticket {
 }
 
 model Session {
-  id            Int       @id @default(autoincrement())
-  userId        Int
-  tokenHash     String    @unique
-  csrfTokenHash String
-  expiresAt     DateTime
-  revokedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  lastUsedAt    DateTime  @default(now())
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             Int       @id @default(autoincrement())
+  userId         Int
+  sessionVersion Int
+  tokenHash      String    @unique
+  csrfTokenHash  String
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime  @default(now())
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([expiresAt])

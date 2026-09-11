@@ -18,7 +18,8 @@ const migrationFiles = [
   new URL('../../prisma/migrations/20260814144249_create_category/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260822000000_lab2_ticket_foundation/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260901000000_lab2_review_fixes/migration.sql', import.meta.url),
-  new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url)
+  new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url),
+  new URL('../../prisma/migrations/20260911100000_bind_session_version/migration.sql', import.meta.url)
 ];
 const validInitialPassword = 'Lab3TestPass!';
 const categoryNameForPreservation = 'Account and Access';

@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { authenticatedRequest } from '../authenticated-request.js';
 
 async function ticketFor(requesterId: number) {
   const [category, relatedSystem] = await Promise.all([
@@ -25,8 +25,9 @@ async function ticketFor(requesterId: number) {
   });
 }
 
-function upload(ticketNumber: string, requesterId: number, filename = 'evidence.pdf', contentType = 'application/pdf') {
-  return request(app)
+async function upload(ticketNumber: string, requesterId: number, filename = 'evidence.pdf', contentType = 'application/pdf') {
+  const api = await authenticatedRequest(app, requesterId);
+  return api
     .post(`/api/tickets/${ticketNumber}/attachments`)
     .set('X-Development-Requester-Id', String(requesterId))
     .attach('file', Buffer.from('attachment evidence'), { filename, contentType });
@@ -41,6 +42,7 @@ describe('Lab 2 attachment APIs', () => {
     const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const ticket = await ticketFor(requester.id);
     const uploaded = await upload(ticket.ticketNumber, requester.id);
+    const api = await authenticatedRequest(app, requester.id);
 
     expect(uploaded.status).toBe(201);
     expect(uploaded.body).toEqual({
@@ -53,10 +55,10 @@ describe('Lab 2 attachment APIs', () => {
       removalReason: null
     });
 
-    const listed = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
-    const downloaded = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
-    const removed = await request(app).delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`).set('X-Development-Requester-Id', String(requester.id));
-    const listedAfterRemoval = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
+    const listed = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
+    const downloaded = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
+    const removed = await api.delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`).set('X-Development-Requester-Id', String(requester.id));
+    const listedAfterRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
 
     expect(listed.status).toBe(200);
     expect(listed.body).toEqual([{
@@ -72,12 +74,12 @@ describe('Lab 2 attachment APIs', () => {
     expect(removed.status).toBe(400);
     expect(listedAfterRemoval.body).toEqual(listed.body);
 
-    const removedWithReason = await request(app)
+    const removedWithReason = await api
       .delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`)
       .set('X-Development-Requester-Id', String(requester.id))
       .send({ reason: 'Uploaded the wrong evidence file.' });
-    const listedAfterReasonedRemoval = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
-    const blockedDownload = await request(app).get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
+    const listedAfterReasonedRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
+    const blockedDownload = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
 
     expect(removedWithReason.status).toBe(200);
     expect(removedWithReason.body).toEqual({

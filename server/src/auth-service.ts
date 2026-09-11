@@ -1,11 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { PrismaClient, User, UserRole } from '@prisma/client';
+import { Prisma, type User, type UserRole } from '@prisma/client';
 import { prisma } from './db.js';
 import {
   isValidEmail,
   maximumPasswordLength,
   minimumPasswordLength,
-  nextFailedLoginState,
   normalizeEmail,
   passwordMatches,
   passwordValidationError,
@@ -29,6 +28,17 @@ export type ResolvedSession = {
   user: PublicUser;
   mustChangePassword: boolean;
 };
+
+type AuthenticationTestHooks = {
+  afterPasswordVerified?: (userId: number) => Promise<void>;
+};
+
+let authenticationTestHooks: AuthenticationTestHooks = {};
+
+export function setAuthenticationTestHooksForTesting(hooks: AuthenticationTestHooks) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('Authentication test hooks are available only in tests.');
+  authenticationTestHooks = hooks;
+}
 
 export class AuthError extends Error {
   constructor(
@@ -62,15 +72,7 @@ function splitCookieValue(cookieValue: string | null) {
   return { sessionToken, csrfToken };
 }
 
-async function createSession(userId: number, database: PrismaClient = prisma) {
-  const { sessionToken, csrfToken, data } = newSessionData(userId);
-  const session = await database.session.create({
-    data
-  });
-  return { sessionId: session.id, cookieValue: `${sessionToken}.${csrfToken}`, csrfToken };
-}
-
-function newSessionData(userId: number) {
+function newSessionData(userId: number, sessionVersion: number) {
   const sessionToken = randomBytes(32).toString('base64url');
   const csrfToken = randomBytes(32).toString('base64url');
   return {
@@ -78,6 +80,7 @@ function newSessionData(userId: number) {
     csrfToken,
     data: {
       userId,
+      sessionVersion,
       tokenHash: digest(sessionToken),
       csrfTokenHash: digest(csrfToken),
       expiresAt: new Date(Date.now() + sessionDurationMilliseconds)
@@ -87,6 +90,42 @@ function newSessionData(userId: number) {
 
 const invalidCredentials = () =>
   new AuthError(401, 'INVALID_CREDENTIALS', 'Email or password is incorrect.');
+
+async function recordFailedLogin(userId: number, verifiedPasswordHash: string, now: Date) {
+  await prisma.$executeRaw(
+    Prisma.sql`
+      UPDATE "User"
+      SET
+        "failedLoginAttempts" = CASE
+          WHEN "failedLoginWindowStartedAt" IS NULL
+            OR "failedLoginWindowStartedAt" <= ${now} - INTERVAL '15 minutes'
+          THEN 1
+          ELSE "failedLoginAttempts" + 1
+        END,
+        "failedLoginWindowStartedAt" = CASE
+          WHEN "failedLoginWindowStartedAt" IS NULL
+            OR "failedLoginWindowStartedAt" <= ${now} - INTERVAL '15 minutes'
+          THEN ${now}
+          ELSE "failedLoginWindowStartedAt"
+        END,
+        "lockedUntil" = CASE
+          WHEN CASE
+            WHEN "failedLoginWindowStartedAt" IS NULL
+              OR "failedLoginWindowStartedAt" <= ${now} - INTERVAL '15 minutes'
+            THEN 1
+            ELSE "failedLoginAttempts" + 1
+          END >= 5
+          THEN ${now} + INTERVAL '15 minutes'
+          ELSE NULL
+        END,
+        "updatedAt" = ${now}
+      WHERE "id" = ${userId}
+        AND "passwordHash" = ${verifiedPasswordHash}
+        AND "isActive" = TRUE
+        AND ("lockedUntil" IS NULL OR "lockedUntil" <= ${now})
+    `
+  );
+}
 
 export async function login(emailInput: unknown, passwordInput: unknown) {
   if (
@@ -113,20 +152,32 @@ export async function login(emailInput: unknown, passwordInput: unknown) {
   }
 
   if (!(await passwordMatches(user.passwordHash, passwordInput))) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: nextFailedLoginState(user.failedLoginAttempts, user.failedLoginWindowStartedAt, now)
-    });
+    await recordFailedLogin(user.id, user.passwordHash, now);
     throw invalidCredentials();
   }
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null }
+  await authenticationTestHooks.afterPasswordVerified?.(user.id);
+  const sessionData = newSessionData(user.id, user.sessionVersion);
+  const session = await prisma.$transaction(async (transaction) => {
+    const guardedUser = await transaction.user.updateMany({
+      where: {
+        id: user.id,
+        passwordHash: user.passwordHash,
+        passwordProvisionedAt: { not: null },
+        sessionVersion: user.sessionVersion,
+        isActive: true,
+        OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }]
+      },
+      data: { failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null }
+    });
+    if (guardedUser.count !== 1) throw invalidCredentials();
+    return transaction.session.create({ data: sessionData.data });
   });
-  const session = await createSession(user.id);
+
   return {
-    ...session,
+    sessionId: session.id,
+    cookieValue: `${sessionData.sessionToken}.${sessionData.csrfToken}`,
+    csrfToken: sessionData.csrfToken,
     user: publicUser(user),
     mustChangePassword: user.mustChangePassword
   };
@@ -148,6 +199,7 @@ export async function resolveSession(cookieValue: string | null): Promise<Resolv
     !session.user.isActive ||
     !session.user.passwordHash ||
     !session.user.passwordProvisionedAt ||
+    session.sessionVersion !== session.user.sessionVersion ||
     !safeDigestMatch(session.csrfTokenHash, digest(tokens.csrfToken))
   ) {
     return null;
@@ -188,14 +240,16 @@ export async function changePassword(
 
   const newPasswordHash = await hashPassword(newPasswordInput, user.email);
   const now = new Date();
-  const replacement = newSessionData(user.id);
+  const replacementVersion = user.sessionVersion + 1;
+  const replacement = newSessionData(user.id, replacementVersion);
   const replacementSession = await prisma.$transaction(async (transaction) => {
-    await transaction.session.updateMany({
-      where: { userId: user.id, revokedAt: null },
-      data: { revokedAt: now }
-    });
-    await transaction.user.update({
-      where: { id: user.id },
+    const guardedUser = await transaction.user.updateMany({
+      where: {
+        id: user.id,
+        passwordHash: user.passwordHash,
+        sessionVersion: user.sessionVersion,
+        isActive: true
+      },
       data: {
         passwordHash: newPasswordHash,
         passwordProvisionedAt: now,
@@ -203,8 +257,13 @@ export async function changePassword(
         failedLoginAttempts: 0,
         failedLoginWindowStartedAt: null,
         lockedUntil: null,
-        sessionVersion: { increment: 1 }
+        sessionVersion: replacementVersion
       }
+    });
+    if (guardedUser.count !== 1) throw invalidCredentials();
+    await transaction.session.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: now }
     });
     return transaction.session.create({ data: replacement.data });
   });

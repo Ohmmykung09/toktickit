@@ -7,8 +7,17 @@ import {
   login,
   logout,
   resolveSession,
-  sessionCookieName
+  sessionCookieName,
+  type ResolvedSession
 } from './auth-service.js';
+
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: ResolvedSession;
+    }
+  }
+}
 
 export const authRouter = express.Router();
 
@@ -141,14 +150,29 @@ export async function blockForcedPasswordChange(
   response: express.Response,
   next: express.NextFunction
 ) {
+  if (request.auth?.mustChangePassword) {
+    response.status(403).json({
+      error: { code: 'PASSWORD_CHANGE_REQUIRED', message: 'Change your initial password to continue.' }
+    });
+    return;
+  }
+  next();
+}
+
+export async function requireAuthenticatedSession(
+  request: express.Request,
+  response: express.Response,
+  next: express.NextFunction
+) {
   try {
     const session = await resolveSession(cookieValue(request));
-    if (session?.mustChangePassword) {
-      response.status(403).json({
-        error: { code: 'PASSWORD_CHANGE_REQUIRED', message: 'Change your initial password to continue.' }
+    if (!session) {
+      response.status(401).json({
+        error: { code: 'UNAUTHENTICATED', message: 'Authentication is required.' }
       });
       return;
     }
+    request.auth = session;
     next();
   } catch (error) {
     next(error);

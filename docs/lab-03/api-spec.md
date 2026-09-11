@@ -4,7 +4,7 @@
 
 - Local base URL: `http://localhost:3000`.
 - JSON is used except attachment upload/download.
-- Protected requests use an opaque server-side session cookie named `toktickit_session`.
+- Protected requests use an opaque server-side session cookie named `toktickit_session`; anonymous, malformed, expired, revoked, and stale-version sessions receive `401 UNAUTHENTICATED`.
 - The cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/`, and `Secure` outside local development.
 - Frontend requests use `credentials: "include"`. The Lab 2 `X-Development-Requester-Id` header is removed.
 - State-changing requests require `X-CSRF-Token` matching the authenticated session and an approved `Origin`.
@@ -50,6 +50,7 @@ Password hashes, counters, lock state, session version, and tokens are never ret
 ## 3. Authorization Rules
 
 - Authentication middleware resolves the session and attaches an allowlisted user identity.
+- Session creation rechecks the verified credential and session version atomically so a concurrent password change cannot publish a stale session.
 - Forced-password-change middleware permits only `/api/auth/me`, `/api/auth/change-password`, and `/api/auth/logout`.
 - Role middleware applies the matrix in `specification.md`.
 - Requester ticket/attachment/comment queries include authenticated requester ownership in the database query.
