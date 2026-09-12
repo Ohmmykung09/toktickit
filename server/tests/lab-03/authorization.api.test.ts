@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import path from 'node:path';
 import request from 'supertest';
 import { afterAll, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
@@ -91,19 +93,123 @@ describe('Lab 3 authorization and Requester regression', () => {
   it('returns the same not-found response for missing and cross-Requester resources', async () => {
     const { owner, otherRequester } = await ticketContext();
     const ticket = await createOwnedTicket(owner.id);
+    const ownerApi = await authenticatedRequest(app, owner.id);
     const otherApi = await authenticatedRequest(app, otherRequester.id);
+    const uploaded = await ownerApi
+      .post(`/api/tickets/${ticket.ticketNumber}/attachments`)
+      .attach('file', Buffer.from('owner-only attachment evidence'), {
+        filename: 'owner-evidence.pdf',
+        contentType: 'application/pdf'
+      });
+    expect(uploaded.status).toBe(201);
 
-    const crossOwner = await otherApi.get(`/api/tickets/${ticket.ticketNumber}`);
-    const missing = await otherApi.get('/api/tickets/TKT-MISSING-0000');
-    const crossOwnerAttachments = await otherApi.get(`/api/tickets/${ticket.ticketNumber}/attachments`);
-    const missingAttachments = await otherApi.get('/api/tickets/TKT-MISSING-0000/attachments');
+    try {
+      const crossOwner = await otherApi.get(`/api/tickets/${ticket.ticketNumber}`);
+      const missing = await otherApi.get('/api/tickets/TKT-MISSING-0000');
+      const crossOwnerAttachments = await otherApi.get(`/api/tickets/${ticket.ticketNumber}/attachments`);
+      const missingAttachments = await otherApi.get('/api/tickets/TKT-MISSING-0000/attachments');
+      const crossOwnerUpload = await otherApi
+        .post(`/api/tickets/${ticket.ticketNumber}/attachments`)
+        .attach('file', Buffer.from('unauthorized upload'), {
+          filename: 'unauthorized.pdf',
+          contentType: 'application/pdf'
+        });
+      const missingUpload = await otherApi
+        .post('/api/tickets/TKT-MISSING-0000/attachments')
+        .attach('file', Buffer.from('missing ticket upload'), {
+          filename: 'missing.pdf',
+          contentType: 'application/pdf'
+        });
+      const crossOwnerDownload = await otherApi.get(
+        `/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`
+      );
+      const missingDownload = await otherApi.get(
+        `/api/tickets/TKT-MISSING-0000/attachments/${uploaded.body.id}/download`
+      );
+      const crossOwnerDelete = await otherApi
+        .delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`)
+        .send({ reason: 'Unauthorized removal attempt.' });
+      const missingDelete = await otherApi
+        .delete(`/api/tickets/TKT-MISSING-0000/attachments/${uploaded.body.id}`)
+        .send({ reason: 'Missing ticket removal attempt.' });
 
-    expect(crossOwner.status).toBe(404);
-    expect(crossOwner.body).toEqual(missing.body);
-    expect(crossOwner.body.error.code).toBe('RESOURCE_NOT_FOUND');
-    expect(crossOwnerAttachments.status).toBe(404);
-    expect(crossOwnerAttachments.body).toEqual(missingAttachments.body);
-    expect(crossOwnerAttachments.body.error.code).toBe('RESOURCE_NOT_FOUND');
+      expect(crossOwner.status).toBe(404);
+      expect(crossOwner.body).toEqual(missing.body);
+      expect(crossOwner.body.error.code).toBe('RESOURCE_NOT_FOUND');
+      expect(crossOwnerAttachments.status).toBe(404);
+      expect(crossOwnerAttachments.body).toEqual(missingAttachments.body);
+      expect(crossOwnerAttachments.body.error.code).toBe('RESOURCE_NOT_FOUND');
+      expect(crossOwnerUpload.status).toBe(404);
+      expect(crossOwnerUpload.body).toEqual(missingUpload.body);
+      expect(crossOwnerUpload.body.error.code).toBe('RESOURCE_NOT_FOUND');
+      expect(crossOwnerDownload.status).toBe(404);
+      expect(crossOwnerDownload.body).toEqual(missingDownload.body);
+      expect(crossOwnerDownload.body.error.code).toBe('RESOURCE_NOT_FOUND');
+      expect(crossOwnerDelete.status).toBe(404);
+      expect(crossOwnerDelete.body).toEqual(missingDelete.body);
+      expect(crossOwnerDelete.body.error.code).toBe('RESOURCE_NOT_FOUND');
+
+      const attachment = await prisma.attachment.findUniqueOrThrow({ where: { id: uploaded.body.id } });
+      expect(attachment.removedAt).toBeNull();
+    } finally {
+      const attachment = await prisma.attachment.findUnique({ where: { id: uploaded.body.id } });
+      if (attachment) {
+        await unlink(path.resolve(process.cwd(), 'uploads', attachment.storedFileName)).catch(() => undefined);
+      }
+      await prisma.ticket.deleteMany({ where: { id: ticket.id } });
+    }
+  });
+
+  it('re-evaluates active state and role for every request made with an existing session', async () => {
+    const suffix = randomUUID().slice(0, 8);
+    const credentialSource = await prisma.user.findFirstOrThrow({
+      where: { passwordHash: { not: null }, passwordProvisionedAt: { not: null } },
+      select: { passwordHash: true }
+    });
+    const users = await Promise.all([
+      prisma.user.create({
+        data: {
+          name: 'Session Deactivation Test',
+          email: `session-deactivation-${suffix}@example.test`,
+          role: 'REQUESTER',
+          isActive: true,
+          passwordHash: credentialSource.passwordHash,
+          passwordProvisionedAt: new Date(),
+          mustChangePassword: false
+        }
+      }),
+      prisma.user.create({
+        data: {
+          name: 'Session Role Test',
+          email: `session-role-${suffix}@example.test`,
+          role: 'REQUESTER',
+          isActive: true,
+          passwordHash: credentialSource.passwordHash,
+          passwordProvisionedAt: new Date(),
+          mustChangePassword: false
+        }
+      })
+    ]);
+
+    try {
+      const deactivatedApi = await authenticatedRequest(app, users[0].id);
+      const changedRoleApi = await authenticatedRequest(app, users[1].id);
+      expect((await deactivatedApi.get('/api/tickets')).status).toBe(200);
+      expect((await changedRoleApi.get('/api/tickets')).status).toBe(200);
+
+      await prisma.user.update({ where: { id: users[0].id }, data: { isActive: false } });
+      await prisma.user.update({ where: { id: users[1].id }, data: { role: 'IT_STAFF' } });
+
+      const deactivatedResponse = await deactivatedApi.get('/api/tickets');
+      const changedRoleResponse = await changedRoleApi.get('/api/tickets');
+
+      expect(deactivatedResponse.status).toBe(401);
+      expect(deactivatedResponse.body.error.code).toBe('UNAUTHENTICATED');
+      expect(changedRoleResponse.status).toBe(403);
+      expect(changedRoleResponse.body.error.code).toBe('FORBIDDEN');
+    } finally {
+      await prisma.user.deleteMany({ where: { id: { in: users.map(({ id }) => id) } } });
+    }
   });
 
   it('requires the approved Origin and session CSRF token for mutations', async () => {
