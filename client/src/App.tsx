@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { StaffWorkspace } from './StaffWorkspace';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
@@ -547,12 +548,7 @@ export function App() {
   }
 
   if (user.role !== 'REQUESTER') {
-    return (
-      <main className="requester-page min-vh-100">
-        <nav className="navbar border-bottom bg-white"><div className="container"><span className="navbar-brand fw-bold text-success">TokTickIT</span></div></nav>
-        <section className="container py-5"><h1 className="h3">TokTickIT IT Service Desk</h1><p className="text-secondary">Your account has no requester workspace.</p></section>
-      </main>
-    );
+    return <StaffWorkspace />;
   }
 
   return (

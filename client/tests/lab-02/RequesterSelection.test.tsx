@@ -17,13 +17,18 @@ describe('Authenticated Requester identity', () => {
     expect(screen.queryByRole('button', { name: /change requester/i })).not.toBeInTheDocument();
   });
 
-  it('does not show requester actions to a staff account', () => {
+  it('shows the staff queue without requester actions to a staff account', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      items: [],
+      filters: { categories: [], relatedSystems: [], owners: [] },
+      pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0 }
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     renderAuthenticated(<App />, {
       ...requesterAuth,
       user: { id: 8, name: 'Narin S.', email: 'narin@example.test', role: 'IT_STAFF' }
     });
 
-    expect(screen.getByText(/no requester workspace/i)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /ticket queue/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open my tickets/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open create ticket/i })).not.toBeInTheDocument();
   });
