@@ -29,7 +29,6 @@ async function upload(ticketNumber: string, requesterId: number, filename = 'evi
   const api = await authenticatedRequest(app, requesterId);
   return api
     .post(`/api/tickets/${ticketNumber}/attachments`)
-    .set('X-Development-Requester-Id', String(requesterId))
     .attach('file', Buffer.from('attachment evidence'), { filename, contentType });
 }
 
@@ -55,10 +54,10 @@ describe('Lab 2 attachment APIs', () => {
       removalReason: null
     });
 
-    const listed = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
-    const downloaded = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
-    const removed = await api.delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`).set('X-Development-Requester-Id', String(requester.id));
-    const listedAfterRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
+    const listed = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`);
+    const downloaded = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`);
+    const removed = await api.delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`);
+    const listedAfterRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`);
 
     expect(listed.status).toBe(200);
     expect(listed.body).toEqual([{
@@ -76,10 +75,9 @@ describe('Lab 2 attachment APIs', () => {
 
     const removedWithReason = await api
       .delete(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}`)
-      .set('X-Development-Requester-Id', String(requester.id))
       .send({ reason: 'Uploaded the wrong evidence file.' });
-    const listedAfterReasonedRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`).set('X-Development-Requester-Id', String(requester.id));
-    const blockedDownload = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`).set('X-Development-Requester-Id', String(requester.id));
+    const listedAfterReasonedRemoval = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments`);
+    const blockedDownload = await api.get(`/api/tickets/${ticket.ticketNumber}/attachments/${uploaded.body.id}/download`);
 
     expect(removedWithReason.status).toBe(200);
     expect(removedWithReason.body).toEqual({
@@ -108,7 +106,8 @@ describe('Lab 2 attachment APIs', () => {
 
     expect(invalid.status).toBe(400);
     expect(invalid.body.error).toMatch(/only jpg/i);
-    expect(otherRequester.status).toBe(403);
+    expect(otherRequester.status).toBe(404);
+    expect(otherRequester.body.error.code).toBe('RESOURCE_NOT_FOUND');
   });
 
   it('rejects a sixth active attachment', async () => {

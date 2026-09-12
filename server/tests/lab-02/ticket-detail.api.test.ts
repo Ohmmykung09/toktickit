@@ -30,13 +30,10 @@ describe('Lab 2 ticket detail API', () => {
       }
     });
     const api = await authenticatedRequest(app, owner.id);
+    const otherApi = await authenticatedRequest(app, otherRequester.id);
 
-    const ownerResponse = await api
-      .get(`/api/tickets/${ticket.ticketNumber}`)
-      .set('X-Development-Requester-Id', String(owner.id));
-    const otherResponse = await api
-      .get(`/api/tickets/${ticket.ticketNumber}`)
-      .set('X-Development-Requester-Id', String(otherRequester.id));
+    const ownerResponse = await api.get(`/api/tickets/${ticket.ticketNumber}`);
+    const otherResponse = await otherApi.get(`/api/tickets/${ticket.ticketNumber}`);
 
     expect(ownerResponse.status).toBe(200);
     expect(ownerResponse.body).toEqual(expect.objectContaining({
@@ -46,7 +43,9 @@ describe('Lab 2 ticket detail API', () => {
       requestedPriority: 'Medium',
       attachments: []
     }));
-    expect(otherResponse.status).toBe(403);
-    expect(otherResponse.body).toEqual({ error: 'You do not have access to this ticket.' });
+    expect(otherResponse.status).toBe(404);
+    expect(otherResponse.body).toEqual({
+      error: { code: 'RESOURCE_NOT_FOUND', message: 'Ticket not found.' }
+    });
   });
 });

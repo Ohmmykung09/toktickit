@@ -2,7 +2,7 @@
 
 TokTickIT is a full-stack IT service desk application for CPE 334. Lab 3 adds authenticated Requester, IT Staff, and Administrator accounts while preserving the completed Lab 2 ticket and attachment workflows.
 
-Authentication uses an expiring server-side session in an `HttpOnly` cookie. Seeded local users must replace their explicitly configured initial password before entering the application. The temporary Lab 2 requester selector remains inside the authenticated shell until the requester-authorization work is completed in the next Lab 3 issue.
+Authentication uses an expiring server-side session in an `HttpOnly` cookie. Seeded local users must replace their explicitly configured initial password before entering the application. Requester identity now comes only from the authenticated session; the temporary Lab 2 requester selector and requester identity header have been removed.
 
 ## Technology
 

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useAuth } from './AuthGate';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
 type Category = Lookup;
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type HealthStatus = 'idle' | 'loading' | 'online' | 'offline';
-type RequesterLoadState = 'loading' | 'ready' | 'empty' | 'error';
 type View = 'tickets' | 'create' | 'detail';
 
 type TicketForm = {
@@ -90,8 +90,15 @@ async function errorMessage(response: Response, fallback: string) {
   if (response.status === 413) return 'Attachment is too large. Maximum size is 5 MB.';
 
   if (response.headers.get('content-type')?.includes('application/json')) {
-    const payload = await response.json().catch(() => null) as { error?: unknown; message?: unknown } | null;
+    const payload = await response.json().catch(() => null) as {
+      error?: unknown | { message?: unknown };
+      message?: unknown;
+    } | null;
     if (typeof payload?.error === 'string') return payload.error;
+    if (payload?.error && typeof payload.error === 'object' && 'message' in payload.error) {
+      const message = (payload.error as { message?: unknown }).message;
+      if (typeof message === 'string') return message;
+    }
     if (typeof payload?.message === 'string') return payload.message;
   }
 
@@ -104,6 +111,7 @@ function validAttachmentFile(file: File) {
 }
 
 function CreateTicketForm({ requester }: { requester: Requester }) {
+  const { authenticatedFetch } = useAuth();
   const [categories, setCategories] = useState<Lookup[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<Lookup[]>([]);
   const [lookupState, setLookupState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -122,8 +130,8 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
     async function loadLookups() {
       try {
         const [categoryResponse, relatedSystemResponse] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/categories`),
-          fetch(`${apiBaseUrl}/api/related-systems`)
+          authenticatedFetch(`${apiBaseUrl}/api/categories`),
+          authenticatedFetch(`${apiBaseUrl}/api/related-systems`)
         ]);
 
         if (!categoryResponse.ok || !relatedSystemResponse.ok) throw new Error();
@@ -136,7 +144,7 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
     }
 
     void loadLookups();
-  }, []);
+  }, [authenticatedFetch]);
 
   function updateForm<K extends keyof TicketForm>(field: K, value: TicketForm[K]) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -171,11 +179,10 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
     setSubmitState('submitting');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/tickets`, {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Development-Requester-Id': String(requester.id),
           'Idempotency-Key': key
         },
         body: JSON.stringify({
@@ -201,9 +208,8 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
           for (const file of selectedAttachments) {
             const formData = new FormData();
             formData.append('file', file);
-            const attachmentResponse = await fetch(`${apiBaseUrl}/api/tickets/${payload.ticketNumber}/attachments`, {
+            const attachmentResponse = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${payload.ticketNumber}/attachments`, {
               method: 'POST',
-              headers: { 'X-Development-Requester-Id': String(requester.id) },
               body: formData
             });
             if (!attachmentResponse.ok) {
@@ -297,6 +303,7 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
 }
 
 function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTicket: (ticketNumber: string) => void }) {
+  const { authenticatedFetch } = useAuth();
   const [tickets, setTickets] = useState<TicketListResponse | null>(null);
   const [categories, setCategories] = useState<Lookup[]>([]);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -325,10 +332,8 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
         if (query.status) params.set('status', query.status);
         if (query.priority) params.set('priority', query.priority);
         const [categoryResponse, response] = await Promise.all([
-          fetch(`${apiBaseUrl}/api/categories`),
-          fetch(`${apiBaseUrl}/api/tickets?${params}`, {
-            headers: { 'X-Development-Requester-Id': String(requester.id) }
-          })
+          authenticatedFetch(`${apiBaseUrl}/api/categories`),
+          authenticatedFetch(`${apiBaseUrl}/api/tickets?${params}`)
         ]);
         if (!categoryResponse.ok || !response.ok) throw new Error();
         const [categoryPayload, payload] = await Promise.all([
@@ -345,7 +350,7 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
       }
     }
     void loadTickets();
-  }, [query, requester.id]);
+  }, [authenticatedFetch, query]);
 
   function changeQuery(change: Partial<typeof query>) {
     setQuery((current) => ({ ...current, ...change, page: change.page ?? 1 }));
@@ -376,13 +381,14 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
 }
 
 function TicketDetailView({ requester, ticketNumber }: { requester: Requester; ticketNumber: string }) {
+  const { authenticatedFetch } = useAuth();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     async function loadTicket() {
       try {
-        const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}`, { headers: { 'X-Development-Requester-Id': String(requester.id) } });
+        const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${ticketNumber}`);
         if (!response.ok) throw new Error();
         setTicket((await response.json()) as TicketDetail);
         setLoadState('ready');
@@ -391,15 +397,16 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
       }
     }
     void loadTicket();
-  }, [requester.id, ticketNumber]);
+  }, [authenticatedFetch, ticketNumber]);
 
   if (loadState === 'loading') return <p role="status">Loading ticket details...</p>;
-  if (loadState === 'error' || !ticket) return <div className="alert alert-danger" role="alert">Unable to load this ticket. Check that it belongs to the selected requester.</div>;
+  if (loadState === 'error' || !ticket) return <div className="alert alert-danger" role="alert">Unable to load this ticket. Check that it belongs to your signed-in account.</div>;
 
-  return <section className="ticket-form-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div><dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl><AttachmentSection initialAttachments={ticket.attachments} requester={requester} ticketNumber={ticket.ticketNumber} /></section>;
+  return <section className="ticket-form-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div><dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl><AttachmentSection initialAttachments={ticket.attachments} ticketNumber={ticket.ticketNumber} /></section>;
 }
 
-function AttachmentSection({ requester, ticketNumber, initialAttachments }: { requester: Requester; ticketNumber: string; initialAttachments: Attachment[] }) {
+function AttachmentSection({ ticketNumber, initialAttachments }: { ticketNumber: string; initialAttachments: Attachment[] }) {
+  const { authenticatedFetch } = useAuth();
   const [attachments, setAttachments] = useState(initialAttachments);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [removalReasons, setRemovalReasons] = useState<Record<number, string>>({});
@@ -427,7 +434,7 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments`, { method: 'POST', headers: { 'X-Development-Requester-Id': String(requester.id) }, body: formData });
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments`, { method: 'POST', body: formData });
       if (!response.ok) throw new Error(await errorMessage(response, 'Unable to upload attachment.'));
       const payload = await response.json().catch(() => null) as Attachment | null;
       if (!payload?.id) throw new Error('Unable to upload attachment.');
@@ -452,11 +459,10 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
     setBusy(true);
     setMessage('');
     try {
-      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}`, {
         method: 'DELETE',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Development-Requester-Id': String(requester.id)
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ reason })
       });
@@ -479,7 +485,7 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
     setBusy(true);
     setMessage('');
     try {
-      const response = await fetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}/download`, { headers: { 'X-Development-Requester-Id': String(requester.id) } });
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${ticketNumber}/attachments/${attachment.id}/download`);
       if (!response.ok) throw new Error('Unable to download attachment.');
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement('a');
@@ -518,32 +524,12 @@ function AttachmentSection({ requester, ticketNumber, initialAttachments }: { re
 }
 
 export function App() {
-  const [requesters, setRequesters] = useState<Requester[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [activeId, setActiveId] = useState('');
-  const [loadState, setLoadState] = useState<RequesterLoadState>('loading');
+  const { authenticatedFetch, user } = useAuth();
   const [view, setView] = useState<View>('tickets');
   const [selectedTicketNumber, setSelectedTicketNumber] = useState('');
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [categories, setCategories] = useState<Category[]>([]);
-  const requester = requesters.find((item) => String(item.id) === activeId);
-
-  useEffect(() => {
-    async function loadRequesters() {
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/development-requesters`);
-        if (!response.ok) throw new Error();
-        const payload = (await response.json()) as unknown;
-        const list = Array.isArray(payload) ? (payload as Requester[]) : [];
-        setRequesters(list);
-        setLoadState(list.length ? 'ready' : 'empty');
-      } catch {
-        setLoadState('error');
-      }
-    }
-
-    void loadRequesters();
-  }, []);
+  const requester = { id: user.id, name: user.name };
 
   async function checkSystem() {
     setHealthStatus('loading');
@@ -551,7 +537,7 @@ export function App() {
     try {
       const health = await fetch(`${apiBaseUrl}/api/health`);
       if (!health.ok) throw new Error();
-      const response = await fetch(`${apiBaseUrl}/api/categories`);
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/categories`);
       if (!response.ok) throw new Error();
       setCategories((await response.json()) as Category[]);
       setHealthStatus('online');
@@ -560,9 +546,35 @@ export function App() {
     }
   }
 
-  if (requester && loadState === 'ready') {
-    return <main className="requester-page min-vh-100"><nav className="navbar border-bottom bg-white"><div className="container flex-wrap gap-2"><span className="navbar-brand fw-bold text-success">TokTickIT</span><div className="d-flex flex-wrap gap-1 align-items-center"><button aria-label="Open My Tickets" className={`btn btn-sm ${view === 'tickets' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('tickets')} type="button">My Tickets</button><button aria-label="Open Create Ticket" className={`btn btn-sm ${view === 'create' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('create')} type="button">Create Ticket</button><span className="small ms-md-2">Requester: <strong>{requester.name}</strong></span><button className="btn btn-outline-success btn-sm" onClick={() => { setActiveId(''); setView('tickets'); }} type="button">Change Requester</button></div></div></nav><section className="container py-5">{view === 'create' && <CreateTicketForm requester={requester} />}{view === 'tickets' && <MyTickets requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}{view === 'detail' && <TicketDetailView requester={requester} ticketNumber={selectedTicketNumber} />}</section></main>;
+  if (user.role !== 'REQUESTER') {
+    return (
+      <main className="requester-page min-vh-100">
+        <nav className="navbar border-bottom bg-white"><div className="container"><span className="navbar-brand fw-bold text-success">TokTickIT</span></div></nav>
+        <section className="container py-5"><h1 className="h3">TokTickIT IT Service Desk</h1><p className="text-secondary">Your account has no requester workspace.</p></section>
+      </main>
+    );
   }
 
-  return <main className="container py-5 requester-page"><section className="requester-card mx-auto p-4 p-md-5"><span className="small fw-semibold text-success text-uppercase">TokTickIT</span><h1 className="mt-2">TokTickIT IT Service Desk</h1><p className="text-secondary">Select a Development Requester to test the requester ticket workflow. This is a Lab 2 testing context, not real authentication.</p>{loadState === 'loading' && <p role="status">Loading development requesters...</p>}{loadState === 'error' && <div className="alert alert-danger" role="alert">Unable to load Development Requesters. Check the backend and try again.</div>}{loadState === 'empty' && <div className="alert alert-warning" role="alert">No active Development Requesters are available.</div>}{loadState === 'ready' && <><label className="form-label fw-semibold" htmlFor="development-requester">Development Requester</label><select className="form-select" id="development-requester" onChange={(event) => setSelectedId(event.target.value)} value={selectedId}><option value="">Choose a requester</option>{requesters.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="btn btn-success mt-3" disabled={!selectedId} onClick={() => setActiveId(selectedId)} type="button">Continue</button></>}<div className="border-top mt-4 pt-3"><button className="btn btn-primary btn-sm" disabled={healthStatus === 'loading'} onClick={checkSystem} type="button">Check System</button>{healthStatus === 'loading' && <p className="mt-3 mb-0" role="status">Loading system status...</p>}{healthStatus === 'online' && <div className="alert alert-success mt-3 mb-0" role="status"><strong>System Status:</strong> Online<p className="mb-0">TokTickIT API is online.</p>{categories.length > 0 && <><h2 className="h6 mt-3">Supported Request Categories</h2><ol className="mb-0">{categories.map((category) => <li key={category.id}>{category.name}</li>)}</ol></>}</div>}{healthStatus === 'offline' && <div className="alert alert-danger mt-3 mb-0" role="alert"><strong>System Status:</strong> Offline<p className="mb-0">Unable to connect to TokTickIT API.</p></div>}</div></section></main>;
+  return (
+    <main className="requester-page min-vh-100">
+      <nav className="navbar border-bottom bg-white">
+        <div className="container flex-wrap gap-2">
+          <span className="navbar-brand fw-bold text-success">TokTickIT</span>
+          <div className="d-flex flex-wrap gap-1 align-items-center">
+            <button aria-label="Open My Tickets" className={`btn btn-sm ${view === 'tickets' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('tickets')} type="button">My Tickets</button>
+            <button aria-label="Open Create Ticket" className={`btn btn-sm ${view === 'create' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('create')} type="button">Create Ticket</button>
+            <button className="btn btn-primary btn-sm" disabled={healthStatus === 'loading'} onClick={checkSystem} type="button">Check System</button>
+          </div>
+        </div>
+      </nav>
+      <section className="container py-5">
+        {healthStatus === 'loading' && <p role="status">Loading system status...</p>}
+        {healthStatus === 'online' && <div className="alert alert-success" role="status"><strong>System Status:</strong> Online<p className="mb-0">TokTickIT API is online.</p>{categories.length > 0 && <><h2 className="h6 mt-3">Supported Request Categories</h2><ol className="mb-0">{categories.map((category) => <li key={category.id}>{category.name}</li>)}</ol></>}</div>}
+        {healthStatus === 'offline' && <div className="alert alert-danger" role="alert"><strong>System Status:</strong> Offline<p className="mb-0">Unable to connect to TokTickIT API.</p></div>}
+        {view === 'create' && <CreateTicketForm requester={requester} />}
+        {view === 'tickets' && <MyTickets requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
+        {view === 'detail' && <TicketDetailView requester={requester} ticketNumber={selectedTicketNumber} />}
+      </section>
+    </main>
+  );
 }

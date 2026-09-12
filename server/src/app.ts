@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import cors from 'cors';
 import express from 'express';
 import multer from 'multer';
-import { Prisma, RequestedPriority, TicketStatus } from '@prisma/client';
+import { Prisma, RequestedPriority, TicketStatus, UserRole } from '@prisma/client';
 import { prisma } from './db.js';
 import { env } from './env.js';
 import {
@@ -15,7 +15,10 @@ import {
 import {
   authRouter,
   blockForcedPasswordChange,
-  requireAuthenticatedSession
+  rejectDevelopmentRequesterHeader,
+  requireAuthenticatedSession,
+  requireMutationCsrf,
+  requireRole
 } from './auth-router.js';
 
 export const app = express();
@@ -35,7 +38,7 @@ app.use(
   cors({
     origin: env.clientOrigin,
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Idempotency-Key', 'X-CSRF-Token', 'X-Development-Requester-Id']
+    allowedHeaders: ['Content-Type', 'Idempotency-Key', 'X-CSRF-Token']
   })
 );
 app.use(express.json());
@@ -49,7 +52,15 @@ app.get('/api/health', (_request, response) => {
   });
 });
 
-app.use('/api', requireAuthenticatedSession, blockForcedPasswordChange);
+app.use(
+  '/api',
+  requireAuthenticatedSession,
+  blockForcedPasswordChange,
+  rejectDevelopmentRequesterHeader,
+  requireMutationCsrf
+);
+
+const requesterOnly = requireRole(UserRole.REQUESTER);
 
 app.get('/api/categories', async (_request, response, next) => {
   try {
@@ -83,25 +94,6 @@ app.get('/api/related-systems', async (_request, response, next) => {
     next(error);
   }
 });
-
-app.get('/api/development-requesters', async (_request, response, next) => {
-  try {
-    const requesters = await prisma.user.findMany({
-      where: { isActive: true, role: 'REQUESTER' },
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true }
-    });
-
-    response.status(200).json(requesters);
-  } catch (error) {
-    next(error);
-  }
-});
-
-function requesterIdFrom(request: express.Request) {
-  const value = Number(request.header('X-Development-Requester-Id'));
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
 
 function validIdempotencyKey(value: string | undefined): value is string {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
@@ -138,17 +130,6 @@ function validTicketInput(body: unknown): CreateTicketInput | null {
   };
 }
 
-async function activeRequesterId(request: express.Request) {
-  const requesterId = requesterIdFrom(request);
-  if (!requesterId) return null;
-
-  const requester = await prisma.user.findFirst({
-    where: { id: requesterId, isActive: true, role: 'REQUESTER' },
-    select: { id: true }
-  });
-  return requester?.id ?? null;
-}
-
 function pageValue(value: unknown, defaultValue: number, maximum: number, minimum = 1) {
   if (value === undefined) return defaultValue;
   const number = Number(value);
@@ -177,11 +158,8 @@ function displayPriority(priority: RequestedPriority) {
 }
 
 async function ownedTicket(request: express.Request, ticketNumber: string) {
-  const requesterId = await activeRequesterId(request);
-  if (!requesterId) return { requesterId: null, ticket: null };
-
-  const ticket = await prisma.ticket.findUnique({ where: { ticketNumber } });
-  if (!ticket || ticket.requesterId !== requesterId) return { requesterId, ticket: null };
+  const requesterId = request.auth!.user.id;
+  const ticket = await prisma.ticket.findFirst({ where: { ticketNumber, requesterId } });
   return { requesterId, ticket };
 }
 
@@ -206,22 +184,18 @@ function removalReasonFrom(body: unknown) {
   return reason.length >= 3 && reason.length <= 500 ? reason : null;
 }
 
-app.post('/api/tickets', async (request, response, next) => {
-  const requesterId = requesterIdFrom(request);
+app.post('/api/tickets', requesterOnly, async (request, response, next) => {
+  const requesterId = request.auth!.user.id;
   const idempotencyKey = request.header('Idempotency-Key');
   const input = validTicketInput(request.body);
 
-  if (!requesterId || !validIdempotencyKey(idempotencyKey) || !input) {
+  if (!validIdempotencyKey(idempotencyKey) || !input) {
     response.status(400).json({ error: 'Ticket details are invalid.' });
     return;
   }
 
   try {
-    const [requester, category, relatedSystem] = await Promise.all([
-      prisma.user.findFirst({
-        where: { id: requesterId, isActive: true, role: 'REQUESTER' },
-        select: { id: true }
-      }),
+    const [category, relatedSystem] = await Promise.all([
       prisma.category.findFirst({
         where: { id: input.categoryId, isActive: true },
         select: { id: true }
@@ -232,8 +206,8 @@ app.post('/api/tickets', async (request, response, next) => {
       })
     ]);
 
-    if (!requester || !category || !relatedSystem) {
-      response.status(400).json({ error: 'Requester or ticket lookup values are invalid.' });
+    if (!category || !relatedSystem) {
+      response.status(400).json({ error: 'Ticket lookup values are invalid.' });
       return;
     }
 
@@ -249,9 +223,9 @@ app.post('/api/tickets', async (request, response, next) => {
   }
 });
 
-app.get('/api/tickets', async (request, response, next) => {
+app.get('/api/tickets', requesterOnly, async (request, response, next) => {
   try {
-    const requesterId = await activeRequesterId(request);
+    const requesterId = request.auth!.user.id;
     const page = pageValue(request.query.page, 1, Number.MAX_SAFE_INTEGER);
     const pageSize = pageValue(request.query.pageSize, 10, 50, 5);
     const categoryId = request.query.categoryId === undefined ? undefined : Number(request.query.categoryId);
@@ -261,7 +235,6 @@ app.get('/api/tickets', async (request, response, next) => {
     const direction = request.query.direction ?? 'desc';
 
     if (
-      !requesterId ||
       !page ||
       !pageSize ||
       (categoryId !== undefined && (!Number.isInteger(categoryId) || categoryId <= 0)) ||
@@ -314,16 +287,10 @@ app.get('/api/tickets', async (request, response, next) => {
   }
 });
 
-app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
+app.get('/api/tickets/:ticketNumber', requesterOnly, async (request, response, next) => {
   try {
-    const requesterId = await activeRequesterId(request);
-    if (!requesterId) {
-      response.status(400).json({ error: 'Development Requester context is invalid.' });
-      return;
-    }
-
-    const ticket = await prisma.ticket.findUnique({
-      where: { ticketNumber: request.params.ticketNumber },
+    const ticket = await prisma.ticket.findFirst({
+      where: { ticketNumber: String(request.params.ticketNumber), requesterId: request.auth!.user.id },
       include: {
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
@@ -331,11 +298,7 @@ app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
       }
     });
     if (!ticket) {
-      response.status(404).json({ error: 'Ticket not found.' });
-      return;
-    }
-    if (ticket.requesterId !== requesterId) {
-      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Ticket not found.' } });
       return;
     }
 
@@ -356,15 +319,11 @@ app.get('/api/tickets/:ticketNumber', async (request, response, next) => {
   }
 });
 
-app.post('/api/tickets/:ticketNumber/attachments', upload.single('file'), async (request, response, next) => {
+app.post('/api/tickets/:ticketNumber/attachments', requesterOnly, upload.single('file'), async (request, response, next) => {
   try {
     const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
-    if (!requesterId) {
-      response.status(400).json({ error: 'Development Requester context is invalid.' });
-      return;
-    }
     if (!ticket) {
-      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Ticket not found.' } });
       return;
     }
     if (!request.file) {
@@ -410,15 +369,11 @@ app.post('/api/tickets/:ticketNumber/attachments', upload.single('file'), async 
   }
 });
 
-app.get('/api/tickets/:ticketNumber/attachments', async (request, response, next) => {
+app.get('/api/tickets/:ticketNumber/attachments', requesterOnly, async (request, response, next) => {
   try {
-    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
-    if (!requesterId) {
-      response.status(400).json({ error: 'Development Requester context is invalid.' });
-      return;
-    }
+    const { ticket } = await ownedTicket(request, String(request.params.ticketNumber));
     if (!ticket) {
-      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Ticket not found.' } });
       return;
     }
 
@@ -432,16 +387,16 @@ app.get('/api/tickets/:ticketNumber/attachments', async (request, response, next
   }
 });
 
-app.get('/api/tickets/:ticketNumber/attachments/:attachmentId/download', async (request, response, next) => {
+app.get('/api/tickets/:ticketNumber/attachments/:attachmentId/download', requesterOnly, async (request, response, next) => {
   try {
-    const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
+    const { ticket } = await ownedTicket(request, String(request.params.ticketNumber));
     const attachmentId = Number(request.params.attachmentId);
-    if (!requesterId || !Number.isInteger(attachmentId) || attachmentId <= 0) {
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
       response.status(400).json({ error: 'Attachment request is invalid.' });
       return;
     }
     if (!ticket) {
-      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Attachment not found.' } });
       return;
     }
 
@@ -449,7 +404,7 @@ app.get('/api/tickets/:ticketNumber/attachments/:attachmentId/download', async (
       where: { id: attachmentId, ticketId: ticket.id, removedAt: null }
     });
     if (!attachment) {
-      response.status(404).json({ error: 'Attachment not found.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Attachment not found.' } });
       return;
     }
 
@@ -461,12 +416,12 @@ app.get('/api/tickets/:ticketNumber/attachments/:attachmentId/download', async (
   }
 });
 
-app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (request, response, next) => {
+app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', requesterOnly, async (request, response, next) => {
   try {
     const { requesterId, ticket } = await ownedTicket(request, String(request.params.ticketNumber));
     const attachmentId = Number(request.params.attachmentId);
     const removalReason = removalReasonFrom(request.body);
-    if (!requesterId || !Number.isInteger(attachmentId) || attachmentId <= 0) {
+    if (!Number.isInteger(attachmentId) || attachmentId <= 0) {
       response.status(400).json({ error: 'Attachment request is invalid.' });
       return;
     }
@@ -475,7 +430,7 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
       return;
     }
     if (!ticket) {
-      response.status(403).json({ error: 'You do not have access to this ticket.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Attachment not found.' } });
       return;
     }
 
@@ -483,7 +438,7 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
       where: { id: attachmentId, ticketId: ticket.id, removedAt: null }
     });
     if (!attachment) {
-      response.status(404).json({ error: 'Attachment not found.' });
+      response.status(404).json({ error: { code: 'RESOURCE_NOT_FOUND', message: 'Attachment not found.' } });
       return;
     }
 
@@ -495,6 +450,12 @@ app.delete('/api/tickets/:ticketNumber/attachments/:attachmentId', async (reques
   } catch (error) {
     next(error);
   }
+});
+
+app.use('/api', (_request, response) => {
+  response.status(404).json({
+    error: { code: 'RESOURCE_NOT_FOUND', message: 'API resource not found.' }
+  });
 });
 
 app.get('/', (_request, response) => {

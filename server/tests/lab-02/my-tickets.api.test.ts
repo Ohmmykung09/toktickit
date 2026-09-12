@@ -43,9 +43,7 @@ describe('Lab 2 My Tickets APIs', () => {
     await createTestTicket(requesters[1].id, `${marker} other requester`);
     const api = await authenticatedRequest(app, requesters[0].id);
 
-    const response = await api
-      .get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&page=1&pageSize=10`)
-      .set('X-Development-Requester-Id', String(requesters[0].id));
+    const response = await api.get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&page=1&pageSize=10`);
 
     expect(response.status).toBe(200);
     expect(response.body.items).toEqual([expect.objectContaining({ ticketNumber: ownTicket.ticketNumber, summary: marker, status: 'New', requestedPriority: 'Medium' })]);
@@ -56,14 +54,15 @@ describe('Lab 2 My Tickets APIs', () => {
     const requesters = await prisma.user.findMany({ where: { isActive: true, role: 'REQUESTER' }, take: 2 });
     const ticket = await createTestTicket(requesters[0].id, `Detail ticket ${Date.now()}`);
     const api = await authenticatedRequest(app, requesters[0].id);
+    const otherApi = await authenticatedRequest(app, requesters[1].id);
 
-    const ownerResponse = await api.get(`/api/tickets/${ticket.ticketNumber}`).set('X-Development-Requester-Id', String(requesters[0].id));
-    const otherResponse = await api.get(`/api/tickets/${ticket.ticketNumber}`).set('X-Development-Requester-Id', String(requesters[1].id));
+    const ownerResponse = await api.get(`/api/tickets/${ticket.ticketNumber}`);
+    const otherResponse = await otherApi.get(`/api/tickets/${ticket.ticketNumber}`);
 
     expect(ownerResponse.status).toBe(200);
     expect(ownerResponse.body).toEqual(expect.objectContaining({ ticketNumber: ticket.ticketNumber, description: ticket.description, attachments: [] }));
-    expect(otherResponse.status).toBe(403);
-    expect(otherResponse.body.error).toMatch(/do not have access/i);
+    expect(otherResponse.status).toBe(404);
+    expect(otherResponse.body.error.code).toBe('RESOURCE_NOT_FOUND');
   });
 
   it('applies category, status, priority, and sort-direction filters together', async () => {
@@ -79,9 +78,7 @@ describe('Lab 2 My Tickets APIs', () => {
     await createTestTicket(requester.id, `${marker} other priority`, { categoryId: categories[1].id, priority: 'LOW' });
     const api = await authenticatedRequest(app, requester.id);
 
-    const response = await api
-      .get(`/api/tickets?q=${encodeURIComponent(marker)}&categoryId=${categories[1].id}&status=New&priority=High&sort=ticketNumber&direction=asc&page=1&pageSize=10`)
-      .set('X-Development-Requester-Id', String(requester.id));
+    const response = await api.get(`/api/tickets?q=${encodeURIComponent(marker)}&categoryId=${categories[1].id}&status=New&priority=High&sort=ticketNumber&direction=asc&page=1&pageSize=10`);
 
     const expectedTicketNumbers = matching.map((ticket) => ticket.ticketNumber).sort();
     expect(response.status).toBe(200);
@@ -100,15 +97,9 @@ describe('Lab 2 My Tickets APIs', () => {
     const orderedNumbers = created.map((ticket) => ticket.ticketNumber).sort();
     const api = await authenticatedRequest(app, requester.id);
 
-    const secondPage = await api
-      .get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&direction=asc&page=2&pageSize=5`)
-      .set('X-Development-Requester-Id', String(requester.id));
-    const beyondLastPage = await api
-      .get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&direction=asc&page=3&pageSize=5`)
-      .set('X-Development-Requester-Id', String(requester.id));
-    const noResults = await api
-      .get(`/api/tickets?q=${encodeURIComponent(`${marker} missing`)}&page=1&pageSize=5`)
-      .set('X-Development-Requester-Id', String(requester.id));
+    const secondPage = await api.get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&direction=asc&page=2&pageSize=5`);
+    const beyondLastPage = await api.get(`/api/tickets?q=${encodeURIComponent(marker)}&sort=ticketNumber&direction=asc&page=3&pageSize=5`);
+    const noResults = await api.get(`/api/tickets?q=${encodeURIComponent(`${marker} missing`)}&page=1&pageSize=5`);
 
     expect(secondPage.status).toBe(200);
     expect(secondPage.body.items.map((ticket: { ticketNumber: string }) => ticket.ticketNumber)).toEqual([orderedNumbers[5]]);
@@ -122,12 +113,12 @@ describe('Lab 2 My Tickets APIs', () => {
   it('rejects invalid list parameters safely', async () => {
     const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
     const api = await authenticatedRequest(app, requester.id);
-    const response = await api.get('/api/tickets?page=0').set('X-Development-Requester-Id', String(requester.id));
+    const response = await api.get('/api/tickets?page=0');
 
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/parameters are invalid/i);
 
-    const smallPage = await api.get('/api/tickets?pageSize=4').set('X-Development-Requester-Id', String(requester.id));
+    const smallPage = await api.get('/api/tickets?pageSize=4');
     expect(smallPage.status).toBe(400);
   });
 });
