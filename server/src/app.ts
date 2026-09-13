@@ -22,6 +22,7 @@ import {
 } from './auth-router.js';
 import { staffRouter } from './staff-router.js';
 import { communicationRouter } from './communication-router.js';
+import { adminRouter } from './admin-router.js';
 
 export const app = express();
 
@@ -66,6 +67,7 @@ const requesterOnly = requireRole(UserRole.REQUESTER);
 
 app.use('/api', staffRouter);
 app.use('/api', communicationRouter);
+app.use('/api', adminRouter);
 
 app.get('/api/categories', async (_request, response, next) => {
   try {

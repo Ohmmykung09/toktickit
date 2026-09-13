@@ -28,9 +28,9 @@ No test may depend on test execution order or mutate shared seed records without
 | API-12 | API | AC-10 | Every permitted/forbidden status transition and owner-required transition | Full matrix is enforced through the API | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-13 | API | AC-11 | Public Comment visibility and Internal Note role restriction | Requester never receives note data; permitted staff roles can read and create notes | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
 | API-14 | API | AC-11 | Message validation, authorship, ordering, literal rendering data, and append-only routes | Backend author/time; trimmed 1-2,000 character records remain ordered and immutable | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
-| API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| API-16 | API | AC-12, AC-13 | Duplicate email, initial-password reset, and session revocation | Conflict/success contracts are enforced | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
-| API-17 | API | AC-14 | Self-deactivation and last-active-Administrator protections | Atomic `409 ADMIN_SAFETY_RULE` without partial update | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
+| API-15 | API | AC-12 | Admin list, search, role filter, create, edit, canonical email, one-role validation, and owner reconciliation | Documented user operations succeed safely; ineligible owners are unassigned without losing history | `server/tests/lab-03/admin-users.api.test.ts` | Passed on Issue #33 review-fix branch |
+| API-16 | API | AC-12, AC-13 | Email collision, password boundaries/CSRF, initial-password reset, role/edit/deactivation session revocation | Conflict/success contracts are enforced and stale sessions end | `server/tests/lab-03/admin-users.api.test.ts` | Passed on Issue #33 review-fix branch |
+| API-17 | API | AC-14 | Self-deactivation and concurrent last-active-Administrator protections | Serializable mutation permits exactly one concurrent removal and returns atomic `409 ADMIN_SAFETY_RULE` for the other | `server/tests/lab-03/admin-users.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #33 review-fix branch |
 | MIG-01 | Migration | AC-05 | Apply the actual migration history to empty and populated isolated PostgreSQL schemas | Lab 2 identity, Ticket/Attachment ownership, and IT Priority backfill remain correct | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-02 | Migration | AC-05, AC-16 | Seed repeat safety after editing User and lookup state | No duplicate fixtures and no user-managed state is overwritten | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-03 | Migration/Security | AC-01, AC-05 | Explicit provisioning, Argon2id, 12/128 password boundaries, and canonical email constraints | Missing credentials fail closed; mixed-case and duplicate canonical emails are rejected | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
@@ -41,7 +41,7 @@ No test may depend on test execution order or mutate shared seed records without
 | UI-05 | UI | AC-07 | Staff Queue loading, data, empty/no-results, forbidden/failure/retry, controls, pagination, and desktop/mobile structures | Every required state and role boundary is visible | `client/tests/lab-03/StaffQueue.test.tsx` | Passed on Issue #30 review-fix branch |
 | UI-06 | UI | AC-08-AC-11 | Staff assignment, priorities, transition controls, attachment metadata, and literal public/private history | Only permitted controls/actions and escaped API content are presented | `client/tests/lab-03/StaffTicketOperations.test.tsx` | Passed on Issue #31 review-fix branch |
 | UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance, composers, validation, and access | Distinct shared/private UI; literal text is safe; Requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Passed on Issue #32 branch |
-| UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/reset and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
+| UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/deactivate/role controls, reset, failure/retry, and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/AdminUsers.test.tsx` | Passed on Issue #33 review-fix branch |
 | E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Planned |
 | E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Planned |
 | E2E-03 | E2E | AC-07-AC-11 | Staff finds ticket, claims/reassigns, changes priority/status, comments, and notes | Full operational flow passes | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
@@ -115,6 +115,16 @@ npm run build
 ```
 
 The API suite was run after applying the real migration history and seed to a fresh isolated PostgreSQL schema. Five API tests, two policy tests, and six focused UI/regression tests passed.
+
+Focused Issue #33 review verification:
+
+```powershell
+npm --workspace server test -- --run tests/lab-03/admin-users.api.test.ts
+npm --workspace client test -- --run tests/lab-03/AdminUsers.test.tsx
+npm run build
+```
+
+The API test command was executed against a fresh isolated PostgreSQL schema after applying the real migration history and seed. Seven API tests passed. The Administrator UI suite passed four tests, and the client/server production build passed.
 
 ## 6. Final Results
 
