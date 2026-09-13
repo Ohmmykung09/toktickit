@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
 import { StaffWorkspace } from './StaffWorkspace';
+import { AdminWorkspace } from './AdminWorkspace';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
@@ -547,7 +548,11 @@ export function App() {
     }
   }
 
-  if (user.role !== 'REQUESTER') {
+  if (user.role === 'ADMINISTRATOR') {
+    return <AdminWorkspace />;
+  }
+
+  if (user.role === 'IT_STAFF') {
     return <StaffWorkspace />;
   }
 
