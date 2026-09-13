@@ -13,21 +13,21 @@ No test may depend on test execution order or mutate shared seed records without
 | UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
 | UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
 | UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Planned |
-| UNIT-04 | Unit | BR-20 | Comment/note trimming and length limits | Empty/oversized content fails; valid content is preserved | `server/tests/lab-03/message-policy.unit.test.ts` | Planned |
+| UNIT-04 | Unit | BR-20 | Comment/note trimming and length limits | Empty/oversized content fails; valid content is preserved | `server/tests/lab-03/message-policy.unit.test.ts` | Passed on Issue #32 branch |
 | API-01 | API | AC-01 | Valid, invalid, inactive, unknown, blocked, and concurrent failed login | Safe response; five parallel failures are counted and lock the account | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
 | API-02 | API | AC-02 | Initial-password login and mandatory change | Normal APIs remain blocked until valid change | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
 | API-03 | API | AC-03 | Anonymous access, current user, expiry, logout, revocation, session version, and concurrent password-change/login | Invalid or stale sessions cannot continue or be published | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
 | API-04 | Security/API | AC-03, AC-04 | Cookie, Origin, CSRF, legacy identity header, and role checks | Unsafe or unauthorized requests are rejected | `server/tests/lab-03/authorization.api.test.ts` | Passed on Issue #29 branch |
 | API-05 | Security/API | AC-04, AC-05 | Cross-requester Ticket access plus Attachment list, upload, download, and delete | Same safe not-found response; no leakage or mutation | `server/tests/lab-03/authorization.api.test.ts` | Passed on Issue #29 branch |
 | API-06 | Regression/API | AC-05, AC-06 | Authenticated Create/List/Detail/Attachment workflows | Lab 2 behaviour passes without requester header | `server/tests/lab-02/*.api.test.ts` | Passed on Issue #29 branch |
-| API-07 | API | AC-06, AC-11 | Requester Public Comments and resolution indication | Owned actions succeed; formal staff actions fail | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
+| API-07 | API | AC-06, AC-11 | Requester Public Comments and idempotent resolution indication | Owned actions succeed without changing formal status; cross-owner and staff actions fail safely | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
 | API-08 | API | AC-07 | Queue search/filter fields with AND semantics, owner scopes, sorting, tie-breaking, and pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
 | API-09 | API | AC-07 | Invalid, repeated, empty, out-of-range, and forbidden queue requests | Safe `400 INVALID_QUERY` or `403 FORBIDDEN` | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
 | API-10 | API | AC-08 | Claim, unassign, active-owner assignment, reassignment, attachment metadata/download, and safe cross-ticket lookup | Valid atomic ownership and protected attachment access only | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-11 | API | AC-08, AC-09 | Concurrent stale assignment/priority/status updates and Requested Priority immutability | Exactly one writer succeeds; stale writer receives `409` | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-12 | API | AC-10 | Every permitted/forbidden status transition and owner-required transition | Full matrix is enforced through the API | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
-| API-13 | API | AC-11 | Public Comment visibility and Internal Note role restriction | Requester never receives note data | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| API-14 | API | AC-11 | Message validation, authorship, ordering, and safe rendering data | Backend author/time; append-only ordered records | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
+| API-13 | API | AC-11 | Public Comment visibility and Internal Note role restriction | Requester never receives note data; permitted staff roles can read and create notes | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
+| API-14 | API | AC-11 | Message validation, authorship, ordering, literal rendering data, and append-only routes | Backend author/time; trimmed 1-2,000 character records remain ordered and immutable | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
 | API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-16 | API | AC-12, AC-13 | Duplicate email, initial-password reset, and session revocation | Conflict/success contracts are enforced | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | API-17 | API | AC-14 | Self-deactivation and last-active-Administrator protections | Atomic `409 ADMIN_SAFETY_RULE` without partial update | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
@@ -37,10 +37,10 @@ No test may depend on test execution order or mutate shared seed records without
 | UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Passed on Issue #28 branch |
 | UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Passed on Issue #28 branch |
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
-| UI-04 | UI/Regression | AC-05, AC-06 | Authenticated Requester identity and preserved Lab 2 screens | No selector; owned workflow remains functional | `client/tests/lab-03/RequesterRegression.test.tsx` | Passed on Issue #29 branch; comments and resolution remain planned |
+| UI-04 | UI/Regression | AC-05, AC-06 | Authenticated Requester identity, preserved Lab 2 screens, Public Comments, and resolution indication | No selector; owned workflow, safe literal comments, and confirmed indication work without Internal Notes | `client/tests/lab-03/RequesterRegression.test.tsx`, `client/tests/lab-03/CommentsNotes.test.tsx` | Passed on Issue #32 branch |
 | UI-05 | UI | AC-07 | Staff Queue loading, data, empty/no-results, forbidden/failure/retry, controls, pagination, and desktop/mobile structures | Every required state and role boundary is visible | `client/tests/lab-03/StaffQueue.test.tsx` | Passed on Issue #30 review-fix branch |
 | UI-06 | UI | AC-08-AC-11 | Staff assignment, priorities, transition controls, attachment metadata, and literal public/private history | Only permitted controls/actions and escaped API content are presented | `client/tests/lab-03/StaffTicketOperations.test.tsx` | Passed on Issue #31 review-fix branch |
-| UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance and access | Distinct UI; requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Planned |
+| UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance, composers, validation, and access | Distinct shared/private UI; literal text is safe; Requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Passed on Issue #32 branch |
 | UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/reset and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
 | E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Planned |
 | E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Planned |
@@ -105,6 +105,16 @@ npm --workspace server test -- --run tests/lab-03/staff-operations.api.test.ts
 npm --workspace client test -- --run tests/lab-03/StaffTicketOperations.test.tsx
 npm run build
 ```
+
+Focused Issue #32 verification:
+
+```powershell
+npm --workspace server test -- --run tests/lab-03/message-policy.unit.test.ts tests/lab-03/comments-notes.api.test.ts
+npm --workspace client test -- --run tests/lab-03/CommentsNotes.test.tsx tests/lab-03/RequesterRegression.test.tsx tests/lab-03/StaffTicketOperations.test.tsx
+npm run build
+```
+
+The API suite was run after applying the real migration history and seed to a fresh isolated PostgreSQL schema. Five API tests, two policy tests, and six focused UI/regression tests passed.
 
 ## 6. Final Results
 

@@ -49,6 +49,9 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [publicContent, setPublicContent] = useState('');
+  const [internalContent, setInternalContent] = useState('');
+  const [posting, setPosting] = useState<'public' | 'internal' | null>(null);
 
   const load = useCallback(async () => {
     setState('loading'); setMessage('');
@@ -97,6 +100,43 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
     } catch { setMessage('Unable to download this attachment. Try again.'); }
   }
 
+  async function postMessage(kind: 'public' | 'internal', event: FormEvent) {
+    event.preventDefault();
+    if (!ticket) return;
+    const content = (kind === 'public' ? publicContent : internalContent).trim();
+    setMessage('');
+    if (!content.length || content.length > 2_000) {
+      setMessage(`${kind === 'public' ? 'Public Comment' : 'Internal Note'} must contain 1 to 2,000 characters.`);
+      return;
+    }
+    setPosting(kind);
+    const path = kind === 'public'
+      ? `/api/tickets/${encodeURIComponent(ticket.ticketNumber)}/public-comments`
+      : `/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}/internal-notes`;
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? `Unable to post the ${kind === 'public' ? 'Public Comment' : 'Internal Note'}.`);
+      }
+      const created = await response.json() as TicketDetail['publicComments'][number];
+      setTicket((current) => current ? {
+        ...current,
+        ...(kind === 'public'
+          ? { publicComments: [...current.publicComments, created] }
+          : { internalNotes: [...current.internalNotes, created] })
+      } : current);
+      if (kind === 'public') setPublicContent(''); else setInternalContent('');
+      setMessage(`${kind === 'public' ? 'Public Comment' : 'Internal Note'} posted.`);
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'Unable to post the message.');
+    } finally {
+      setPosting(null);
+    }
+  }
+
   if (state === 'loading') return <div className="queue-state" role="status">Loading ticket detail...</div>;
   if (state === 'error' || !ticket) return <div className="queue-state queue-error" role="alert"><p>{message}</p><button className="btn btn-outline-danger" onClick={() => void load()} type="button">Retry</button></div>;
   const allowed: Record<string, string[]> = { NEW: ['OPEN', 'IN_PROGRESS', 'CANCELLED'], OPEN: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], IN_PROGRESS: ['WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], WAITING_FOR_REQUESTER: ['IN_PROGRESS', 'RESOLVED', 'CANCELLED'], RESOLVED: ['CLOSED', 'REOPENED'], REOPENED: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], CLOSED: ['REOPENED'], CANCELLED: [] };
@@ -115,7 +155,10 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
       </aside>
     </div>
     <section className="staff-attachments"><h2>Attachments</h2>{ticket.attachments.length ? <ul>{ticket.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.originalFileName}</strong><span>{Math.ceil(attachment.sizeBytes / 1024)} KB · {attachment.mimeType}</span></div>{attachment.removedAt ? <p>Removed: {attachment.removalReason ?? 'No reason recorded.'}</p> : <button className="btn btn-sm btn-outline-success" onClick={() => void downloadAttachment(attachment)} type="button">Download</button>}</li>)}</ul> : <p>No attachments.</p>}</section>
-    <div className="staff-history"><section><h2>Public comments</h2>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><strong>{item.author.name}</strong><p>{item.content}</p></article>) : <p>No public comments.</p>}</section><section><h2>Internal notes</h2>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><strong>{item.author.name}</strong><p>{item.content}</p></article>) : <p>No internal notes.</p>}</section></div>
+    <div className="staff-history">
+      <section className="public-history" aria-label="Public Comments"><h2>Public Comments</h2><p className="history-caption">Shared with the Requester and authorized staff.</p>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Public Comments yet.</p>}<form onSubmit={(event) => void postMessage('public', event)}><label htmlFor="staff-public-comment">Add Public Comment</label><textarea id="staff-public-comment" maxLength={2_000} onChange={(event) => setPublicContent(event.target.value)} rows={4} value={publicContent} /><footer><span>{publicContent.length} / 2,000</span><button className="btn btn-success btn-sm" disabled={posting !== null} type="submit">{posting === 'public' ? 'Posting...' : 'Post Public Comment'}</button></footer></form></section>
+      <section className="internal-history" aria-label="Internal Notes"><h2>Internal Notes</h2><p className="internal-label">Internal - not visible to Requester</p>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Internal Notes yet.</p>}<form onSubmit={(event) => void postMessage('internal', event)}><label htmlFor="staff-internal-note">Add Internal Note</label><textarea id="staff-internal-note" maxLength={2_000} onChange={(event) => setInternalContent(event.target.value)} rows={4} value={internalContent} /><footer><span>{internalContent.length} / 2,000</span><button className="btn btn-warning btn-sm" disabled={posting !== null} type="submit">{posting === 'internal' ? 'Posting...' : 'Post Internal Note'}</button></footer></form></section>
+    </div>
   </section>;
 }
 
