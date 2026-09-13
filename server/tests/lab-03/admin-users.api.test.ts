@@ -1,15 +1,68 @@
+import { randomUUID } from 'node:crypto';
+import { UserRole } from '@prisma/client';
+import request from 'supertest';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
+import { setAdminMutationTestHooksForTesting } from '../../src/admin-router.js';
 import { app } from '../../src/app.js';
 import { hashPassword } from '../../src/auth-policy.js';
 import { prisma } from '../../src/db.js';
+import { env } from '../../src/env.js';
 import { authenticatedRequest } from '../authenticated-request.js';
 
-afterEach(async () => { await prisma.user.deleteMany({ where: { email: { endsWith: '@admin-test.example' } } }); });
+const ticketPrefix = 'TKT-ADMIN-TEST-';
+
+afterEach(async () => {
+  setAdminMutationTestHooksForTesting({});
+  await prisma.ticket.deleteMany({ where: { ticketNumber: { startsWith: ticketPrefix } } });
+  await prisma.user.deleteMany({ where: { email: { endsWith: '@admin-test.example' } } });
+});
+
 afterAll(async () => { await prisma.$disconnect(); });
 
 async function administratorApi() {
   const administrator = await prisma.user.findFirstOrThrow({ where: { role: 'ADMINISTRATOR', isActive: true } });
   return authenticatedRequest(app, administrator.id);
+}
+
+async function createManagedUser(role: UserRole = UserRole.REQUESTER, localPart = randomUUID()) {
+  return prisma.user.create({
+    data: {
+      name: `Managed ${role}`,
+      email: `${localPart}@admin-test.example`,
+      role,
+      isActive: true,
+      passwordHash: await hashPassword('InitialPass123!'),
+      passwordProvisionedAt: new Date(),
+      mustChangePassword: false
+    }
+  });
+}
+
+async function createOwnedTicket(ownerId: number) {
+  const [requesterUser, category, relatedSystem] = await Promise.all([
+    prisma.user.findFirstOrThrow({ where: { role: UserRole.REQUESTER, isActive: true } }),
+    prisma.category.findFirstOrThrow({ where: { isActive: true } }),
+    prisma.relatedSystem.findFirstOrThrow({ where: { isActive: true } })
+  ]);
+  const suffix = randomUUID().slice(0, 8);
+  return prisma.ticket.create({
+    data: {
+      ticketNumber: `${ticketPrefix}${suffix}`,
+      idempotencyKey: randomUUID(),
+      requesterId: requesterUser.id,
+      ownerId,
+      categoryId: category.id,
+      relatedSystemId: relatedSystem.id,
+      summary: `Administrator ownership ${suffix}`,
+      description: 'This ticket verifies atomic owner reconciliation.',
+      requestedPriority: 'MEDIUM',
+      itPriority: 'HIGH',
+      status: 'IN_PROGRESS',
+      publicComments: { create: { authorId: requesterUser.id, content: 'Preserve public history.' } },
+      internalNotes: { create: { authorId: ownerId, content: 'Preserve internal history.' } }
+    },
+    include: { _count: { select: { publicComments: true, internalNotes: true } } }
+  });
 }
 
 describe('Lab 3 Administrator user management', () => {
@@ -26,42 +79,131 @@ describe('Lab 3 Administrator user management', () => {
     expect(listed.body[0].id).toBe(created.body.id);
   });
 
-  it('rejects duplicate canonical email, invalid roles, and Requester access', async () => {
+  it('normalizes edited email, rejects canonical collisions and invalid roles, and revokes the edited user session', async () => {
     const api = await administratorApi();
-    const requester = await prisma.user.findFirstOrThrow({ where: { role: 'REQUESTER', isActive: true } });
-    const requesterApi = await authenticatedRequest(app, requester.id);
-    await api.post('/api/admin/users').send({ name: 'First User', email: 'duplicate@admin-test.example', role: 'REQUESTER', isActive: true, initialPassword: 'InitialPass123!' });
-    const duplicate = await api.post('/api/admin/users').send({ name: 'Second User', email: 'DUPLICATE@ADMIN-TEST.EXAMPLE', role: 'REQUESTER', isActive: true, initialPassword: 'InitialPass123!' });
-    const invalidRole = await api.post('/api/admin/users').send({ name: 'Invalid User', email: 'invalid@admin-test.example', role: 'OWNER', isActive: true, initialPassword: 'InitialPass123!' });
-    const forbidden = await requesterApi.get('/api/admin/users');
-    expect(duplicate.status).toBe(409); expect(duplicate.body.error.code).toBe('EMAIL_ALREADY_EXISTS');
-    expect(invalidRole.status).toBe(400); expect(invalidRole.body.error.fieldErrors.role).toBeTruthy();
-    expect(forbidden.status).toBe(403);
+    const first = await createManagedUser(UserRole.REQUESTER, 'canonical.first');
+    const target = await createManagedUser(UserRole.REQUESTER, 'canonical.target');
+    const targetApi = await authenticatedRequest(app, target.id);
+
+    const normalized = await api.patch(`/api/admin/users/${target.id}`).send({ email: '  EDITED.USER@ADMIN-TEST.EXAMPLE ' });
+    expect(normalized.status).toBe(200);
+    expect(normalized.body.email).toBe('edited.user@admin-test.example');
+    expect((await targetApi.get('/api/categories')).status).toBe(401);
+
+    const collision = await api.patch(`/api/admin/users/${target.id}`).send({ email: first.email.toUpperCase() });
+    const invalidRole = await api.patch(`/api/admin/users/${target.id}`).send({ role: 'OWNER' });
+    expect(collision.status).toBe(409);
+    expect(collision.body.error.code).toBe('EMAIL_ALREADY_EXISTS');
+    expect(invalidRole.status).toBe(400);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).email).toBe('edited.user@admin-test.example');
   });
 
-  it('enforces administrator safety rules', async () => {
-    const api = await administratorApi();
-    const administrator = api.user;
-    const selfDeactivate = await api.patch(`/api/admin/users/${administrator.id}`).send({ isActive: false });
-    expect(selfDeactivate.status).toBe(409);
-    expect(selfDeactivate.body.error.code).toBe('ADMIN_SAFETY_RULE');
+  it('rejects Requester access to administrator operations', async () => {
+    const requesterUser = await prisma.user.findFirstOrThrow({ where: { role: 'REQUESTER', isActive: true } });
+    const requesterApi = await authenticatedRequest(app, requesterUser.id);
+    const forbidden = await requesterApi.get('/api/admin/users');
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body.error.code).toBe('FORBIDDEN');
+  });
 
-    const otherAdministrators = await prisma.user.count({ where: { role: 'ADMINISTRATOR', isActive: true, id: { not: administrator.id } } });
-    if (otherAdministrators === 0) {
-      const demoteLast = await api.patch(`/api/admin/users/${administrator.id}`).send({ role: 'IT_STAFF' });
-      expect(demoteLast.status).toBe(409);
-      expect(demoteLast.body.error.code).toBe('ADMIN_SAFETY_RULE');
+  it('atomically allows only one of two concurrent last-Administrator removals', async () => {
+    const primary = await prisma.user.findFirstOrThrow({ where: { role: UserRole.ADMINISTRATOR, isActive: true } });
+    const extraActiveAdministrators = await prisma.user.findMany({
+      where: { role: UserRole.ADMINISTRATOR, isActive: true, id: { not: primary.id } },
+      select: { id: true, isActive: true }
+    });
+    await prisma.user.updateMany({
+      where: { id: { in: extraActiveAdministrators.map(({ id }) => id) } },
+      data: { isActive: false }
+    });
+    const secondary = await createManagedUser(UserRole.ADMINISTRATOR, 'concurrent.admin');
+    const [primaryApi, secondaryApi] = await Promise.all([
+      authenticatedRequest(app, primary.id),
+      authenticatedRequest(app, secondary.id)
+    ]);
+
+    let arrivals = 0;
+    let release!: () => void;
+    const bothReady = new Promise<void>((resolve) => { release = resolve; });
+    setAdminMutationTestHooksForTesting({
+      beforeTransaction: async () => {
+        arrivals += 1;
+        if (arrivals === 2) release();
+        await bothReady;
+      }
+    });
+
+    try {
+      const results = await Promise.all([
+        primaryApi.patch(`/api/admin/users/${secondary.id}`).send({ isActive: false }),
+        secondaryApi.patch(`/api/admin/users/${primary.id}`).send({ isActive: false })
+      ]);
+      expect(results.map(({ status }) => status).sort()).toEqual([200, 409]);
+      expect(results.find(({ status }) => status === 409)?.body.error.code).toBe('ADMIN_SAFETY_RULE');
+      expect(await prisma.user.count({ where: { role: UserRole.ADMINISTRATOR, isActive: true } })).toBe(1);
+    } finally {
+      setAdminMutationTestHooksForTesting({});
+      await prisma.user.update({ where: { id: primary.id }, data: { role: UserRole.ADMINISTRATOR, isActive: true } });
+      await Promise.all(extraActiveAdministrators.map(({ id, isActive }) =>
+        prisma.user.update({ where: { id }, data: { isActive } })
+      ));
     }
   });
 
-  it('revokes existing sessions when an initial password is replaced', async () => {
+  it('unassigns tickets, advances the concurrency token, preserves history, and revokes a deactivated owner session', async () => {
     const api = await administratorApi();
-    const passwordHash = await hashPassword('OldInitial123!');
-    const target = await prisma.user.create({ data: { name: 'Password Target', email: 'password.target@admin-test.example', role: 'REQUESTER', isActive: true, passwordHash, passwordProvisionedAt: new Date(), mustChangePassword: false } });
+    const owner = await createManagedUser(UserRole.IT_STAFF, 'deactivated.owner');
+    const ownerApi = await authenticatedRequest(app, owner.id);
+    const ticket = await createOwnedTicket(owner.id);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    const result = await api.patch(`/api/admin/users/${owner.id}`).send({ isActive: false });
+    const stored = await prisma.ticket.findUniqueOrThrow({
+      where: { id: ticket.id },
+      include: { _count: { select: { publicComments: true, internalNotes: true } } }
+    });
+    expect(result.status).toBe(200);
+    expect(stored.ownerId).toBeNull();
+    expect(stored.status).toBe(ticket.status);
+    expect(stored.updatedAt.getTime()).toBeGreaterThan(ticket.updatedAt.getTime());
+    expect(stored._count).toEqual(ticket._count);
+    expect((await ownerApi.get('/api/staff/tickets')).status).toBe(401);
+  });
+
+  it('unassigns tickets and revokes sessions when an owner is changed to Requester', async () => {
+    const api = await administratorApi();
+    const owner = await createManagedUser(UserRole.IT_STAFF, 'demoted.owner');
+    const ownerApi = await authenticatedRequest(app, owner.id);
+    const ticket = await createOwnedTicket(owner.id);
+
+    const result = await api.patch(`/api/admin/users/${owner.id}`).send({ role: UserRole.REQUESTER });
+    const stored = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+    expect(result.status).toBe(200);
+    expect(result.body.role).toBe('REQUESTER');
+    expect(stored.ownerId).toBeNull();
+    expect(stored.status).toBe(ticket.status);
+    expect((await ownerApi.get('/api/categories')).status).toBe(401);
+  });
+
+  it('validates password boundaries and CSRF before resetting the initial password and revoking sessions', async () => {
+    const api = await administratorApi();
+    const target = await createManagedUser(UserRole.REQUESTER, 'password.target');
     const targetApi = await authenticatedRequest(app, target.id);
-    expect((await targetApi.get('/api/categories')).status).toBe(200);
-    const reset = await api.post(`/api/admin/users/${target.id}/initial-password`).send({ initialPassword: 'NewInitial456!' });
-    expect(reset.status).toBe(204);
+
+    const missingCsrf = await request(app)
+      .post(`/api/admin/users/${target.id}/initial-password`)
+      .set('Cookie', api.cookie)
+      .set('Origin', env.clientOrigin)
+      .send({ initialPassword: 'ValidBoundary1!' });
+    const tooShort = await api.post(`/api/admin/users/${target.id}/initial-password`).send({ initialPassword: 'Aa1!aaaaaaa' });
+    const tooLong = await api.post(`/api/admin/users/${target.id}/initial-password`).send({ initialPassword: `Aa1!${'a'.repeat(125)}` });
+    const validBoundary = await api.post(`/api/admin/users/${target.id}/initial-password`).send({ initialPassword: 'Aa1!aaaaaaaa' });
+
+    expect(missingCsrf.status).toBe(403);
+    expect(missingCsrf.body.error.code).toBe('CSRF_REJECTED');
+    expect(tooShort.status).toBe(400);
+    expect(tooLong.status).toBe(400);
+    expect(validBoundary.status).toBe(204);
     expect((await targetApi.get('/api/categories')).status).toBe(401);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).mustChangePassword).toBe(true);
   });

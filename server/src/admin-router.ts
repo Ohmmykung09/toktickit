@@ -7,6 +7,42 @@ import { prisma } from './db.js';
 export const adminRouter = Router();
 const administratorOnly = requireRole(UserRole.ADMINISTRATOR);
 const publicUserSelect = { id: true, name: true, email: true, role: true, isActive: true, mustChangePassword: true, createdAt: true, updatedAt: true } satisfies Prisma.UserSelect;
+const maximumSerializableAttempts = 3;
+
+type AdminMutationTestHooks = {
+  beforeTransaction?: () => Promise<void>;
+};
+
+let adminMutationTestHooks: AdminMutationTestHooks = {};
+
+export function setAdminMutationTestHooksForTesting(hooks: AdminMutationTestHooks) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('Administrator test hooks are available only in tests.');
+  adminMutationTestHooks = hooks;
+}
+
+class AdminMutationError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+async function runSerializable<T>(operation: (transaction: Prisma.TransactionClient) => Promise<T>) {
+  for (let attempt = 1; attempt <= maximumSerializableAttempts; attempt += 1) {
+    try {
+      return await prisma.$transaction(operation, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      });
+    } catch (caught) {
+      const retryable = caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2034';
+      if (!retryable || attempt === maximumSerializableAttempts) throw caught;
+    }
+  }
+  throw new Error('Serializable transaction retry limit reached.');
+}
 
 function error(response: Parameters<Parameters<typeof adminRouter.get>[1]>[1], status: number, code: string, message: string, fieldErrors?: Record<string, string>) {
   response.status(status).json({ error: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } });
@@ -111,23 +147,60 @@ adminRouter.patch('/admin/users/:userId', administratorOnly, async (request, res
       error(response, 400, 'VALIDATION_ERROR', 'User update is invalid.');
       return;
     }
-    const target = await prisma.user.findUnique({ where: { id: userId } });
-    if (!target) { error(response, 404, 'RESOURCE_NOT_FOUND', 'User not found.'); return; }
-    if (userId === request.auth!.user.id && data.isActive === false) {
-      error(response, 409, 'ADMIN_SAFETY_RULE', 'You cannot deactivate your own account.'); return;
-    }
-    const removesActiveAdmin = target.role === UserRole.ADMINISTRATOR && target.isActive && (data.isActive === false || (data.role !== undefined && data.role !== UserRole.ADMINISTRATOR));
-    if (removesActiveAdmin && await prisma.user.count({ where: { role: UserRole.ADMINISTRATOR, isActive: true } }) <= 1) {
-      error(response, 409, 'ADMIN_SAFETY_RULE', 'At least one active Administrator must remain.'); return;
-    }
-    const deactivate = target.isActive && data.isActive === false;
-    const user = await prisma.$transaction(async (transaction) => {
-      const updated = await transaction.user.update({ where: { id: userId }, data: { ...data, ...(deactivate ? { sessionVersion: { increment: 1 } } : {}) }, select: publicUserSelect });
-      if (deactivate) await transaction.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await adminMutationTestHooks.beforeTransaction?.();
+    const user = await runSerializable(async (transaction) => {
+      const target = await transaction.user.findUnique({ where: { id: userId } });
+      if (!target) throw new AdminMutationError(404, 'RESOURCE_NOT_FOUND', 'User not found.');
+      if (userId === request.auth!.user.id && data.isActive === false) {
+        throw new AdminMutationError(409, 'ADMIN_SAFETY_RULE', 'You cannot deactivate your own account.');
+      }
+
+      const nextRole = typeof data.role === 'string' ? data.role : target.role;
+      const nextIsActive = typeof data.isActive === 'boolean' ? data.isActive : target.isActive;
+      const removesActiveAdmin = target.role === UserRole.ADMINISTRATOR && target.isActive && (!nextIsActive || nextRole !== UserRole.ADMINISTRATOR);
+      if (removesActiveAdmin) {
+        const activeAdministrators = await transaction.user.count({
+          where: { role: UserRole.ADMINISTRATOR, isActive: true }
+        });
+        if (activeAdministrators <= 1) {
+          throw new AdminMutationError(409, 'ADMIN_SAFETY_RULE', 'At least one active Administrator must remain.');
+        }
+      }
+
+      const roleChanged = nextRole !== target.role;
+      const deactivated = target.isActive && !nextIsActive;
+      const profileChanged =
+        (typeof data.name === 'string' && data.name !== target.name) ||
+        (typeof data.email === 'string' && data.email !== target.email);
+      const losesStaffEligibility =
+        (target.role === UserRole.IT_STAFF || target.role === UserRole.ADMINISTRATOR) &&
+        (!nextIsActive || nextRole === UserRole.REQUESTER);
+      const invalidatesSessions = deactivated || roleChanged || profileChanged;
+      const changedAt = new Date();
+
+      if (losesStaffEligibility) {
+        await transaction.ticket.updateMany({
+          where: { ownerId: userId },
+          data: { ownerId: null, updatedAt: changedAt }
+        });
+      }
+
+      const updated = await transaction.user.update({
+        where: { id: userId },
+        data: { ...data, ...(invalidatesSessions ? { sessionVersion: { increment: 1 } } : {}) },
+        select: publicUserSelect
+      });
+      if (invalidatesSessions) {
+        await transaction.session.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: changedAt }
+        });
+      }
       return updated;
     });
     response.status(200).json(user);
   } catch (caught) {
+    if (caught instanceof AdminMutationError) { error(response, caught.status, caught.code, caught.message); return; }
     if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') { error(response, 409, 'EMAIL_ALREADY_EXISTS', 'A user with this email address already exists.'); return; }
     next(caught);
   }
