@@ -21,8 +21,8 @@ No test may depend on test execution order or mutate shared seed records without
 | API-05 | Security/API | AC-04, AC-05 | Cross-requester Ticket access plus Attachment list, upload, download, and delete | Same safe not-found response; no leakage or mutation | `server/tests/lab-03/authorization.api.test.ts` | Passed on Issue #29 branch |
 | API-06 | Regression/API | AC-05, AC-06 | Authenticated Create/List/Detail/Attachment workflows | Lab 2 behaviour passes without requester header | `server/tests/lab-02/*.api.test.ts` | Passed on Issue #29 branch |
 | API-07 | API | AC-06, AC-11 | Requester Public Comments and resolution indication | Owned actions succeed; formal staff actions fail | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
-| API-08 | API | AC-07 | Queue default order, search, filters, sorting, pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
-| API-09 | API | AC-07 | Invalid, repeated, empty, and out-of-range queue query values | Safe `400 INVALID_QUERY` | `server/tests/lab-03/staff-queue.api.test.ts` | Planned |
+| API-08 | API | AC-07 | Queue search/filter fields with AND semantics, owner scopes, sorting, tie-breaking, and pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
+| API-09 | API | AC-07 | Invalid, repeated, empty, out-of-range, and forbidden queue requests | Safe `400 INVALID_QUERY` or `403 FORBIDDEN` | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
 | API-10 | API | AC-08 | Claim, unassign, active-owner assignment, and reassignment | Valid atomic ownership updates only | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
 | API-11 | API | AC-08, AC-09 | Stale assignment/priority updates and Requested Priority immutability | `409` on stale update; Requested Priority unchanged | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
 | API-12 | API | AC-10 | Every permitted and forbidden status transition | Matrix and owner requirements enforced | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
@@ -38,7 +38,7 @@ No test may depend on test execution order or mutate shared seed records without
 | UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Passed on Issue #28 branch |
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
 | UI-04 | UI/Regression | AC-05, AC-06 | Authenticated Requester identity and preserved Lab 2 screens | No selector; owned workflow remains functional | `client/tests/lab-03/RequesterRegression.test.tsx` | Passed on Issue #29 branch; comments and resolution remain planned |
-| UI-05 | UI | AC-07 | Staff Queue data, query controls, states, pagination, and stale responses | Current query wins and all states are visible | `client/tests/lab-03/StaffTicketQueue.test.tsx` | Planned |
+| UI-05 | UI | AC-07 | Staff Queue loading, data, empty/no-results, forbidden/failure/retry, controls, pagination, and desktop/mobile structures | Every required state and role boundary is visible | `client/tests/lab-03/StaffQueue.test.tsx` | Passed on Issue #30 review-fix branch |
 | UI-06 | UI | AC-08, AC-09, AC-10 | Staff assignment, priorities, transition controls, conflicts | Only permitted controls/actions are presented | `client/tests/lab-03/StaffTicketDetail.test.tsx` | Planned |
 | UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance and access | Distinct UI; requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Planned |
 | UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/reset and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
@@ -46,7 +46,7 @@ No test may depend on test execution order or mutate shared seed records without
 | E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Planned |
 | E2E-03 | E2E | AC-07-AC-11 | Staff finds ticket, claims/reassigns, changes priority/status, comments, and notes | Full operational flow passes | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
 | E2E-04 | E2E | AC-12-AC-14 | Admin creates/edits/deactivates user, resets password, and verifies safety rules | Full administration flow passes | `e2e/lab-03/user-administration.spec.ts` | Planned |
-| E2E-05 | Responsive/A11y | AC-15 | Major screens at 1440x900, 768x1024, and 390x844 | No clipping/overlap/overflow; focus and labels visible | `e2e/lab-03/visual-evidence.spec.ts` | Planned |
+| E2E-05 | Responsive/A11y | AC-07, AC-15 | Staff Queue at 390x844 plus final major-screen visual suite | Mobile cards visible, table hidden, no requester actions or horizontal overflow | `e2e/lab-03/staff-queue-responsive.spec.ts` | Passed on Issue #30 review-fix branch; final multi-screen suite planned |
 
 ## 3. Acceptance-Criteria Traceability
 
@@ -87,6 +87,15 @@ npm test
 npm run build
 npx playwright test e2e/lab-03
 git diff --check
+```
+
+Focused Issue #30 review verification:
+
+```powershell
+npm --workspace server test -- --run tests/lab-03/staff-queue.api.test.ts
+npm --workspace client test -- --run tests/lab-03/StaffQueue.test.tsx
+npx playwright test e2e/lab-03/staff-queue-responsive.spec.ts
+npm run build
 ```
 
 ## 6. Final Results
