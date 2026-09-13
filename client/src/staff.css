@@ -46,4 +46,9 @@
 .staff-detail aside select { height: 40px; padding: 6px 8px; border: 1px solid #b9ccc1; background: #fff; }
 .staff-history { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; } .staff-history article { padding: 10px 0; border-top: 1px solid #e1e9e4; }
 .staff-history article p { margin: 3px 0 0; }
+.staff-attachments { margin-top: 24px; padding: 20px; border: 1px solid #cfddd5; background: #fff; }
+.staff-attachments ul { margin: 0; padding: 0; list-style: none; }
+.staff-attachments li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid #e1e9e4; }
+.staff-attachments li span { display: block; color: #60736a; font-size: .78rem; }
+.staff-attachments li p { margin: 3px 0 0; color: #8a3f49; font-size: .82rem; }
 @media (max-width: 760px) { .staff-detail-grid, .staff-history { grid-template-columns: 1fr; } .staff-detail dl { grid-template-columns: 1fr; } }

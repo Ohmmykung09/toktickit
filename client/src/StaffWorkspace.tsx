@@ -28,7 +28,7 @@ type TicketDetail = QueueItem & {
   description: string;
   createdAt: string;
   requesterResolutionIndicatedAt: string | null;
-  attachments: Array<{ id: number; originalFileName: string; removedAt: string | null }>;
+  attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string; removedAt: string | null; removalReason: string | null }>;
   publicComments: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
   internalNotes: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
 };
@@ -85,6 +85,18 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
     finally { setBusy(false); }
   }
 
+  async function downloadAttachment(attachment: TicketDetail['attachments'][number]) {
+    setMessage('');
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticketNumber)}/attachments/${attachment.id}/download`);
+      if (!response.ok) { setMessage('Unable to download this attachment. It may have been removed.'); return; }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = attachment.originalFileName; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch { setMessage('Unable to download this attachment. Try again.'); }
+  }
+
   if (state === 'loading') return <div className="queue-state" role="status">Loading ticket detail...</div>;
   if (state === 'error' || !ticket) return <div className="queue-state queue-error" role="alert"><p>{message}</p><button className="btn btn-outline-danger" onClick={() => void load()} type="button">Retry</button></div>;
   const allowed: Record<string, string[]> = { NEW: ['OPEN', 'IN_PROGRESS', 'CANCELLED'], OPEN: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], IN_PROGRESS: ['WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], WAITING_FOR_REQUESTER: ['IN_PROGRESS', 'RESOLVED', 'CANCELLED'], RESOLVED: ['CLOSED', 'REOPENED'], REOPENED: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], CLOSED: ['REOPENED'], CANCELLED: [] };
@@ -102,6 +114,7 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
         <label>Status<select aria-label="Set ticket status" disabled={busy || allowed[ticket.status].length === 0} onChange={(event) => { const next = event.target.value; if (['RESOLVED', 'CLOSED', 'CANCELLED', 'REOPENED'].includes(next) && !globalThis.confirm(`Confirm status change to ${label(next)}?`)) return; void update('status', { status: next }); }} value=""><option value="">Choose transition</option>{allowed[ticket.status].map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
       </aside>
     </div>
+    <section className="staff-attachments"><h2>Attachments</h2>{ticket.attachments.length ? <ul>{ticket.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.originalFileName}</strong><span>{Math.ceil(attachment.sizeBytes / 1024)} KB · {attachment.mimeType}</span></div>{attachment.removedAt ? <p>Removed: {attachment.removalReason ?? 'No reason recorded.'}</p> : <button className="btn btn-sm btn-outline-success" onClick={() => void downloadAttachment(attachment)} type="button">Download</button>}</li>)}</ul> : <p>No attachments.</p>}</section>
     <div className="staff-history"><section><h2>Public comments</h2>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><strong>{item.author.name}</strong><p>{item.content}</p></article>) : <p>No public comments.</p>}</section><section><h2>Internal notes</h2>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><strong>{item.author.name}</strong><p>{item.content}</p></article>) : <p>No internal notes.</p>}</section></div>
   </section>;
 }

@@ -23,9 +23,9 @@ No test may depend on test execution order or mutate shared seed records without
 | API-07 | API | AC-06, AC-11 | Requester Public Comments and resolution indication | Owned actions succeed; formal staff actions fail | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
 | API-08 | API | AC-07 | Queue search/filter fields with AND semantics, owner scopes, sorting, tie-breaking, and pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
 | API-09 | API | AC-07 | Invalid, repeated, empty, out-of-range, and forbidden queue requests | Safe `400 INVALID_QUERY` or `403 FORBIDDEN` | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
-| API-10 | API | AC-08 | Claim, unassign, active-owner assignment, and reassignment | Valid atomic ownership updates only | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| API-11 | API | AC-08, AC-09 | Stale assignment/priority updates and Requested Priority immutability | `409` on stale update; Requested Priority unchanged | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| API-12 | API | AC-10 | Every permitted and forbidden status transition | Matrix and owner requirements enforced | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
+| API-10 | API | AC-08 | Claim, unassign, active-owner assignment, reassignment, attachment metadata/download, and safe cross-ticket lookup | Valid atomic ownership and protected attachment access only | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
+| API-11 | API | AC-08, AC-09 | Concurrent stale assignment/priority/status updates and Requested Priority immutability | Exactly one writer succeeds; stale writer receives `409` | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
+| API-12 | API | AC-10 | Every permitted/forbidden status transition and owner-required transition | Full matrix is enforced through the API | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-13 | API | AC-11 | Public Comment visibility and Internal Note role restriction | Requester never receives note data | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
 | API-14 | API | AC-11 | Message validation, authorship, ordering, and safe rendering data | Backend author/time; append-only ordered records | `server/tests/lab-03/comments-notes.api.test.ts` | Planned |
 | API-15 | API | AC-12 | Admin list, search, role filter, create, edit, and one-role validation | Documented user operations succeed safely | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
@@ -39,7 +39,7 @@ No test may depend on test execution order or mutate shared seed records without
 | UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
 | UI-04 | UI/Regression | AC-05, AC-06 | Authenticated Requester identity and preserved Lab 2 screens | No selector; owned workflow remains functional | `client/tests/lab-03/RequesterRegression.test.tsx` | Passed on Issue #29 branch; comments and resolution remain planned |
 | UI-05 | UI | AC-07 | Staff Queue loading, data, empty/no-results, forbidden/failure/retry, controls, pagination, and desktop/mobile structures | Every required state and role boundary is visible | `client/tests/lab-03/StaffQueue.test.tsx` | Passed on Issue #30 review-fix branch |
-| UI-06 | UI | AC-08, AC-09, AC-10 | Staff assignment, priorities, transition controls, conflicts | Only permitted controls/actions are presented | `client/tests/lab-03/StaffTicketDetail.test.tsx` | Planned |
+| UI-06 | UI | AC-08-AC-11 | Staff assignment, priorities, transition controls, attachment metadata, and literal public/private history | Only permitted controls/actions and escaped API content are presented | `client/tests/lab-03/StaffTicketOperations.test.tsx` | Passed on Issue #31 review-fix branch |
 | UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance and access | Distinct UI; requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Planned |
 | UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/reset and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/UserManagement.test.tsx` | Planned |
 | E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Planned |
@@ -95,6 +95,14 @@ Focused Issue #30 review verification:
 npm --workspace server test -- --run tests/lab-03/staff-queue.api.test.ts
 npm --workspace client test -- --run tests/lab-03/StaffQueue.test.tsx
 npx playwright test e2e/lab-03/staff-queue-responsive.spec.ts
+npm run build
+```
+
+Focused Issue #31 review verification:
+
+```powershell
+npm --workspace server test -- --run tests/lab-03/staff-operations.api.test.ts
+npm --workspace client test -- --run tests/lab-03/StaffTicketOperations.test.tsx
 npm run build
 ```
 

@@ -1,9 +1,12 @@
+import { access } from 'node:fs/promises';
+import path from 'node:path';
 import { Prisma, RequestedPriority, TicketStatus, UserRole } from '@prisma/client';
 import { Router } from 'express';
 import { prisma } from './db.js';
 import { requireRole } from './auth-router.js';
 
 export const staffRouter = Router();
+const attachmentDirectory = path.resolve(process.cwd(), 'uploads');
 
 const staffOnly = requireRole(UserRole.IT_STAFF, UserRole.ADMINISTRATOR);
 const pageSizes = [10, 20, 50] as const;
@@ -182,6 +185,33 @@ staffRouter.get('/staff/tickets/:ticketNumber', staffOnly, async (request, respo
     }
     response.status(200).json(ticket);
   } catch (error) { next(error); }
+});
+
+staffRouter.get('/staff/tickets/:ticketNumber/attachments/:attachmentId/download', staffOnly, async (request, response, next) => {
+  try {
+    const attachmentId = Number(request.params.attachmentId);
+    if (!Number.isSafeInteger(attachmentId) || attachmentId <= 0) {
+      fail(response, 404, 'RESOURCE_NOT_FOUND', 'Attachment not found.');
+      return;
+    }
+    const attachment = await prisma.attachment.findFirst({
+      where: { id: attachmentId, removedAt: null, ticket: { ticketNumber: String(request.params.ticketNumber) } },
+      select: { storedFileName: true, originalFileName: true }
+    });
+    if (!attachment) {
+      fail(response, 404, 'RESOURCE_NOT_FOUND', 'Attachment not found.');
+      return;
+    }
+    const filePath = path.join(attachmentDirectory, attachment.storedFileName);
+    await access(filePath);
+    response.download(filePath, attachment.originalFileName);
+  } catch (caught) {
+    if ((caught as NodeJS.ErrnoException).code === 'ENOENT') {
+      fail(response, 404, 'RESOURCE_NOT_FOUND', 'Attachment not found.');
+      return;
+    }
+    next(caught);
+  }
 });
 
 function mutationBody(body: unknown) {
