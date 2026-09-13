@@ -12,7 +12,7 @@ No test may depend on test execution order or mutate shared seed records without
 | --- | --- | --- | --- | --- | --- | --- |
 | UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
 | UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
-| UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Planned |
+| UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Passed on Issue #34 integrated branch |
 | UNIT-04 | Unit | BR-20 | Comment/note trimming and length limits | Empty/oversized content fails; valid content is preserved | `server/tests/lab-03/message-policy.unit.test.ts` | Passed on Issue #32 branch |
 | API-01 | API | AC-01 | Valid, invalid, inactive, unknown, blocked, and concurrent failed login | Safe response; five parallel failures are counted and lock the account | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
 | API-02 | API | AC-02 | Initial-password login and mandatory change | Normal APIs remain blocked until valid change | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
@@ -36,17 +36,17 @@ No test may depend on test execution order or mutate shared seed records without
 | MIG-03 | Migration/Security | AC-01, AC-05 | Explicit provisioning, Argon2id, 12/128 password boundaries, and canonical email constraints | Missing credentials fail closed; mixed-case and duplicate canonical emails are rejected | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | UI-01 | UI | AC-01 | Login validation, busy, safe failure, and successful navigation | Accessible states and safe messages render | `client/tests/lab-03/Login.test.tsx` | Passed on Issue #28 branch |
 | UI-02 | UI | AC-02 | Mandatory Change Password states and rules | Normal navigation blocked until success | `client/tests/lab-03/ChangePassword.test.tsx` | Passed on Issue #28 branch |
-| UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Planned |
+| UI-03 | UI/Security | AC-03, AC-04 | Role navigation, forbidden route, logout, and session expiry | Protected content/navigation is removed | `client/tests/lab-03/RoleNavigation.test.tsx` | Passed on Issue #34 integrated branch |
 | UI-04 | UI/Regression | AC-05, AC-06 | Authenticated Requester identity, preserved Lab 2 screens, Public Comments, and resolution indication | No selector; owned workflow, safe literal comments, and confirmed indication work without Internal Notes | `client/tests/lab-03/RequesterRegression.test.tsx`, `client/tests/lab-03/CommentsNotes.test.tsx` | Passed on Issue #32 branch |
 | UI-05 | UI | AC-07 | Staff Queue loading, data, empty/no-results, forbidden/failure/retry, controls, pagination, and desktop/mobile structures | Every required state and role boundary is visible | `client/tests/lab-03/StaffQueue.test.tsx` | Passed on Issue #30 review-fix branch |
 | UI-06 | UI | AC-08-AC-11 | Staff assignment, priorities, transition controls, attachment metadata, and literal public/private history | Only permitted controls/actions and escaped API content are presented | `client/tests/lab-03/StaffTicketOperations.test.tsx` | Passed on Issue #31 review-fix branch |
 | UI-07 | UI/Security | AC-11 | Public Comments versus Internal Notes appearance, composers, validation, and access | Distinct shared/private UI; literal text is safe; Requester has no Internal Note surface | `client/tests/lab-03/CommentsNotes.test.tsx` | Passed on Issue #32 branch |
 | UI-08 | UI | AC-12, AC-13, AC-14 | Admin list/create/edit/deactivate/role controls, reset, failure/retry, and safety conflicts | Complete minimalist management states render | `client/tests/lab-03/AdminUsers.test.tsx` | Passed on Issue #33 review-fix branch |
-| E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Planned |
-| E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Planned |
-| E2E-03 | E2E | AC-07-AC-11 | Staff finds ticket, claims/reassigns, changes priority/status, comments, and notes | Full operational flow passes | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
-| E2E-04 | E2E | AC-12-AC-14 | Admin creates/edits/deactivates user, resets password, and verifies safety rules | Full administration flow passes | `e2e/lab-03/user-administration.spec.ts` | Planned |
-| E2E-05 | Responsive/A11y | AC-07, AC-15 | Staff Queue at 390x844 plus final major-screen visual suite | Mobile cards visible, table hidden, no requester actions or horizontal overflow | `e2e/lab-03/staff-queue-responsive.spec.ts` | Passed on Issue #30 review-fix branch; final multi-screen suite planned |
+| E2E-01 | E2E | AC-01, AC-02, AC-03 | Initial login, mandatory change, authenticated shell, logout, direct-access denial | Full authentication lifecycle passes | `e2e/lab-03/authentication.spec.ts` | Passed on isolated PostgreSQL schema on Issue #34 integrated branch |
+| E2E-02 | E2E | AC-05, AC-06, AC-11 | Requester creates/opens ticket, comments, uses attachment, indicates resolution | Authenticated Requester flow and isolation pass | `e2e/lab-03/requester-regression.spec.ts` | Passed on isolated PostgreSQL schema on Issue #34 integrated branch |
+| E2E-03 | E2E | AC-07-AC-11 | Staff finds ticket, claims/reassigns, changes priority/status, comments, and notes | Full operational flow passes | `e2e/lab-03/staff-ticket-flow.spec.ts` | Passed on isolated PostgreSQL schema on Issue #34 integrated branch |
+| E2E-04 | E2E | AC-12-AC-14 | Admin creates/edits/deactivates user, resets password, and verifies safety rules | Full administration flow passes | `e2e/lab-03/user-administration.spec.ts` | Passed on isolated PostgreSQL schema on Issue #34 integrated branch |
+| E2E-05 | Responsive/A11y | AC-07, AC-15 | Major screens at desktop, tablet, and mobile with WCAG 2 A/AA scan and overflow checks | Responsive structures render without page overflow or automated accessibility violations | `e2e/lab-03/*.spec.ts` | Passed; 27 screenshots generated on Issue #34 integrated branch |
 
 ## 3. Acceptance-Criteria Traceability
 
@@ -79,13 +79,11 @@ No test may depend on test execution order or mutate shared seed records without
 
 ## 5. Final Verification Commands
 
-Run from final `main` after installing dependencies and preparing the documented local test database:
+Run from final `main` after installing dependencies and preparing the documented local database. The quality scripts create, migrate, seed, and remove their own isolated PostgreSQL schemas:
 
 ```powershell
 npm run prisma:generate
-npm test
-npm run build
-npx playwright test e2e/lab-03
+npm run test:quality:lab3
 git diff --check
 ```
 
@@ -126,17 +124,28 @@ npm run build
 
 The API test command was executed against a fresh isolated PostgreSQL schema after applying the real migration history and seed. Seven API tests passed. The Administrator UI suite passed four tests, and the client/server production build passed.
 
+Focused Issue #34 integrated verification:
+
+```powershell
+npm run test:client
+npm run test:server:isolated
+npm run build
+npm run test:e2e:lab3
+git diff --check
+```
+
+The isolated runner creates a uniquely named PostgreSQL schema, applies all five migration files, seeds deterministic fixtures, runs the requested suite, and drops only that schema. Playwright uses real client, server, authentication cookies, CSRF protection, and PostgreSQL data. Axe checks WCAG 2 A/AA rules while responsive helpers verify page-level overflow and save 27 screenshots.
+
 ## 6. Final Results
 
-Do not mark planned tests as passing until they run against the final integrated implementation.
+These results were recorded on the Issue #34 integrated branch. Run the same command again on final `main` before submission and replace the branch wording with the final commit reference.
 
 | Suite | Expected | Final result |
 | --- | --- | --- |
-| Unit and policy tests | All pass; none skipped | Pending |
-| API/integration and authorization tests | All pass; none skipped | Pending |
-| Lab 1 and Lab 2 regression tests | All pass; none skipped | Pending |
-| React UI component tests | All pass; none skipped | Pending |
-| Migration and seed checks | Preserve data and pass repeat run | Pending |
-| Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | Pending |
-| Client and server production build | Pass | Pending |
-| Visual checklist | Complete from final `main` | Pending |
+| Unit, policy, API, integration, authorization, and regression tests | All pass; none skipped | 64/64 passed on isolated PostgreSQL schema |
+| React UI component and role-navigation tests | All pass; none skipped | 40/40 passed |
+| Migration and seed checks | Preserve data and pass repeat run | 5/5 migration tests passed; all 5 migration files applied before each isolated suite |
+| Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | 6/6 passed against real client/server/PostgreSQL |
+| Automated accessibility and responsive checks | WCAG 2 A/AA scan and no page-level overflow | Passed at 1440x1000, 820x1180, and 390x844 |
+| Client and server production build | Pass | Passed |
+| Visual checklist | Complete from final `main` | Completed on Issue #34 integrated branch; final-main confirmation required |

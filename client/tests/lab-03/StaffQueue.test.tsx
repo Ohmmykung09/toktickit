@@ -65,6 +65,7 @@ describe('IT Staff Ticket Queue', () => {
   it('does not expose requester actions to an Administrator', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(json(queue()));
     renderAuthenticated(<App />, { ...requesterAuth, user: { id: 10, name: 'Admin', email: 'admin@example.test', role: 'ADMINISTRATOR' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Ticket Queue' }));
     expect(await screen.findByRole('heading', { name: 'Ticket Queue' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open my tickets/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open create ticket/i })).not.toBeInTheDocument();

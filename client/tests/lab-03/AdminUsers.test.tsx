@@ -16,7 +16,7 @@ describe('Administrator user management', () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ...existing, id: 2, name: 'New Staff', email: 'new.staff@example.test', role: 'IT_STAFF', mustChangePassword: true }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify([existing]), { status: 200, headers: { 'Content-Type': 'application/json' } }));
     renderAuthenticated(<App />, administrator);
-    expect(await screen.findByText('aom@example.test')).toBeInTheDocument();
+    expect(await screen.findAllByText('aom@example.test')).toHaveLength(2);
     await userEvent.type(screen.getByLabelText('User name'), 'New Staff');
     await userEvent.type(screen.getByLabelText('User email'), 'new.staff@example.test');
     await userEvent.selectOptions(screen.getByLabelText('User role'), 'IT_STAFF');

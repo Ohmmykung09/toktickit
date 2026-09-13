@@ -4,6 +4,7 @@ import { Prisma, RequestedPriority, TicketStatus, UserRole } from '@prisma/clien
 import { Router } from 'express';
 import { prisma } from './db.js';
 import { requireRole } from './auth-router.js';
+import { canTransition, transitionRequiresOwner } from './status-policy.js';
 
 export const staffRouter = Router();
 const attachmentDirectory = path.resolve(process.cwd(), 'uploads');
@@ -11,17 +12,6 @@ const attachmentDirectory = path.resolve(process.cwd(), 'uploads');
 const staffOnly = requireRole(UserRole.IT_STAFF, UserRole.ADMINISTRATOR);
 const pageSizes = [10, 20, 50] as const;
 const sortFields = ['createdAt', 'updatedAt', 'ticketNumber', 'requestedPriority', 'itPriority', 'status'] as const;
-const transitions: Record<TicketStatus, readonly TicketStatus[]> = {
-  NEW: ['OPEN', 'IN_PROGRESS', 'CANCELLED'],
-  OPEN: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'],
-  IN_PROGRESS: ['WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'],
-  WAITING_FOR_REQUESTER: ['IN_PROGRESS', 'RESOLVED', 'CANCELLED'],
-  RESOLVED: ['CLOSED', 'REOPENED'],
-  REOPENED: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'],
-  CLOSED: ['REOPENED'],
-  CANCELLED: []
-};
-
 const staffTicketSelect = {
   ticketNumber: true, summary: true, description: true, requestedPriority: true, itPriority: true,
   status: true, requesterResolutionIndicatedAt: true, createdAt: true, updatedAt: true,
@@ -295,11 +285,11 @@ staffRouter.patch('/staff/tickets/:ticketNumber/status', staffOnly, async (reque
       fail(response, 400, 'VALIDATION_ERROR', 'The ticket already has this status.');
       return;
     }
-    if (!transitions[ticket.status].includes(status)) {
+    if (!canTransition(ticket.status, status)) {
       fail(response, 409, 'INVALID_STATUS_TRANSITION', `A ticket cannot move from ${ticket.status} to ${status}.`);
       return;
     }
-    if (['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CLOSED', 'REOPENED'].includes(status) && ticket.ownerId === null) {
+    if (transitionRequiresOwner(status) && ticket.ownerId === null) {
       fail(response, 409, 'OWNER_REQUIRED', 'Assign an owner before moving this ticket to the selected status.');
       return;
     }

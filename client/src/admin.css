@@ -13,10 +13,24 @@
 .admin-list { overflow-x: auto; } .admin-list > p, .admin-list > div { padding: 32px; text-align: center; }
 .admin-list table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: .87rem; } .admin-list th { padding: 10px 12px; background: #eaf1ed; text-align: left; }
 .admin-list td { padding: 12px; border-top: 1px solid #e1e9e4; }
+.admin-cards { display: none; }
 .admin-editor { padding: 20px; } .admin-editor h2 { font-size: 1.1rem; } .admin-editor form { display: grid; gap: 13px; }
 .admin-editor .admin-check { display: flex; align-items: center; gap: 8px; } .admin-editor .admin-check input { width: 18px; height: 18px; }
 .password-reset { margin-top: 24px; padding-top: 20px; border-top: 1px solid #cfddd5; } .password-reset h3 { font-size: .95rem; } .password-reset p { color: #60736a; font-size: .8rem; }
 .password-reset label { margin-top: 10px; } .password-reset button { margin-top: 14px; }
 .admin-page > .staff-page .staff-nav { display: none; }
 @media (max-width: 900px) { .admin-grid { grid-template-columns: 1fr; } }
-@media (max-width: 620px) { .admin-nav { padding: 0 14px; } .admin-nav button { padding: 0 9px; font-size: .8rem; } .admin-layout { padding: 22px 14px 40px; } .admin-header p { display: none; } .admin-filters { grid-template-columns: 1fr; } }
+@media (max-width: 620px) {
+  .admin-nav { padding: 0 14px; } .admin-nav button { padding: 0 9px; font-size: .8rem; }
+  .admin-layout { padding: 22px 14px 40px; } .admin-header p { display: none; } .admin-filters { grid-template-columns: 1fr; }
+  .admin-list { overflow: visible; border: 0; background: transparent; }
+  .admin-list table { display: none; }
+  .admin-cards { display: grid; gap: 10px; }
+  .admin-cards article { padding: 14px; border: 1px solid #cfddd5; background: #fff; }
+  .admin-cards header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+  .admin-cards header div { min-width: 0; display: grid; gap: 2px; }
+  .admin-cards header span { color: #56685f; font-size: .78rem; overflow-wrap: anywhere; }
+  .admin-cards dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 14px 0 0; }
+  .admin-cards dt { color: #56685f; font-size: .7rem; }
+  .admin-cards dd { margin: 2px 0 0; font-size: .78rem; overflow-wrap: anywhere; }
+}

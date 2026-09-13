@@ -13,12 +13,16 @@
     "test": "npm --workspace client test -- --run && npm --workspace server test -- --run",
     "test:client": "npm --workspace client test -- --run",
     "test:server": "npm --workspace server test -- --run",
+    "test:server:isolated": "node scripts/run-lab3-isolated.mjs server",
+    "test:e2e:lab3": "node scripts/run-lab3-isolated.mjs e2e",
+    "test:quality:lab3": "npm run test:client && npm run test:server:isolated && npm run build && npm run test:e2e:lab3",
     "db:check": "npm --workspace server run db:check",
     "prisma:generate": "npm --workspace server run prisma:generate",
     "prisma:migrate": "npm --workspace server run prisma:migrate",
     "prisma:seed": "npm --workspace server run prisma:seed"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "playwright": "^1.62.1"
   }
 }

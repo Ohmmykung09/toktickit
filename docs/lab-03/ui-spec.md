@@ -116,15 +116,17 @@ Final inspection is performed on `main` at desktop 1440 x 900, tablet 768 x 1024
 - IT Staff Ticket Queue and Ticket Detail, including comments and notes.
 - Administrator User Management create/edit/conflict states.
 
-Screenshots are stored under `artifacts/lab-03/screenshots/authentication/`, `staff-queue/`, `staff-ticket-detail/`, and `user-management/`.
+Screenshots are stored under `artifacts/lab-03/screenshots/authentication/`, `requester/`, `staff-queue/`, `staff-ticket-detail/`, and `user-management/`.
 
 ## 12. Visual Checklist
 
-- Zen Green tokens and component hierarchy match Lab 2.
-- Role navigation, user identity, and Logout remain visible and readable.
-- Status, role, Requested Priority, and IT Priority badges are distinguishable by text and color.
-- Editable and read-only fields are visibly different.
-- Public Comments and Internal Notes cannot be visually confused.
-- Validation, focus, busy, success, empty, no-results, forbidden, conflict, and failure states are readable.
-- Buttons, labels, menus, tables/items, and dialogs contain no clipped or overlapping text.
-- Desktop, tablet, and mobile have no unexpected page-level horizontal overflow.
+- [x] Zen Green tokens and component hierarchy match Lab 2.
+- [x] Role navigation, user identity, and Logout remain visible and readable.
+- [x] Status, role, Requested Priority, and IT Priority badges are distinguishable by text and color.
+- [x] Editable and read-only fields are visibly different.
+- [x] Public Comments and Internal Notes cannot be visually confused.
+- [x] Validation, focus, busy, success, empty, no-results, forbidden, conflict, and failure states are readable.
+- [x] Buttons, labels, menus, tables/items, and dialogs contain no clipped or overlapping text.
+- [x] Desktop, tablet, and mobile have no unexpected page-level horizontal overflow.
+
+The checklist was completed on the Issue #34 integrated branch using Playwright screenshots at 1440x1000, 820x1180, and 390x844. Axe reported no WCAG 2 A/AA violations on the captured major-screen states. Repeat the suite on final `main` before submission.
