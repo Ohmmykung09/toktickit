@@ -9,6 +9,17 @@ import { canTransition, transitionRequiresOwner } from './status-policy.js';
 export const staffRouter = Router();
 const attachmentDirectory = path.resolve(process.cwd(), 'uploads');
 
+type StaffMutationTestHooks = {
+  beforeTransaction?: (operation: 'assignment' | 'it-priority' | 'status') => Promise<void>;
+};
+
+let staffMutationTestHooks: StaffMutationTestHooks = {};
+
+export function setStaffMutationTestHooksForTesting(hooks: StaffMutationTestHooks) {
+  if (process.env.NODE_ENV !== 'test') throw new Error('Staff mutation test hooks are available only in tests.');
+  staffMutationTestHooks = hooks;
+}
+
 const staffOnly = requireRole(UserRole.IT_STAFF, UserRole.ADMINISTRATOR);
 const pageSizes = [10, 20, 50] as const;
 const sortFields = ['createdAt', 'updatedAt', 'ticketNumber', 'requestedPriority', 'itPriority', 'status'] as const;
@@ -214,9 +225,23 @@ function mutationBody(body: unknown) {
 async function mutateTicket(
   ticketNumber: string,
   expectedUpdatedAt: Date,
-  data: Prisma.TicketUncheckedUpdateManyInput
+  data: Prisma.TicketUncheckedUpdateManyInput,
+  operation: 'assignment' | 'it-priority' | 'status',
+  ownerIdToValidate?: number | null
 ) {
+  await staffMutationTestHooks.beforeTransaction?.(operation);
   return prisma.$transaction(async (transaction) => {
+    if (ownerIdToValidate !== undefined && ownerIdToValidate !== null) {
+      const owners = await transaction.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+        SELECT "id"
+        FROM "User"
+        WHERE "id" = ${ownerIdToValidate}
+          AND "isActive" = true
+          AND "role" IN ('IT_STAFF'::"UserRole", 'ADMINISTRATOR'::"UserRole")
+        FOR UPDATE
+      `);
+      if (!owners[0]) return { kind: 'invalid-owner' as const };
+    }
     const existing = await transaction.ticket.findUnique({ where: { ticketNumber } });
     if (!existing) return { kind: 'missing' as const };
     const updated = await transaction.ticket.updateMany({
@@ -230,6 +255,7 @@ async function mutateTicket(
 
 function sendMutationResult(response: Parameters<Parameters<typeof staffRouter.patch>[1]>[1], result: Awaited<ReturnType<typeof mutateTicket>>) {
   if (result.kind === 'missing') return fail(response, 404, 'RESOURCE_NOT_FOUND', 'Ticket not found.');
+  if (result.kind === 'invalid-owner') return fail(response, 400, 'VALIDATION_ERROR', 'The selected owner is not active or permitted.');
   if (result.kind === 'conflict') return fail(response, 409, 'STALE_WRITE', 'The ticket changed. Reload it before saving again.');
   response.status(200).json(result.ticket);
 }
@@ -243,14 +269,9 @@ staffRouter.patch('/staff/tickets/:ticketNumber/assignment', staffOnly, async (r
       return;
     }
     const ownerId = ownerValue === null ? null : Number(ownerValue);
-    if (ownerId !== null) {
-      const owner = await prisma.user.findFirst({ where: { id: ownerId, isActive: true, role: { in: [UserRole.IT_STAFF, UserRole.ADMINISTRATOR] } }, select: { id: true } });
-      if (!owner) {
-        fail(response, 400, 'VALIDATION_ERROR', 'The selected owner is not active or permitted.');
-        return;
-      }
-    }
-    sendMutationResult(response, await mutateTicket(String(request.params.ticketNumber), parsed.expectedUpdatedAt, { ownerId }));
+    sendMutationResult(response, await mutateTicket(
+      String(request.params.ticketNumber), parsed.expectedUpdatedAt, { ownerId }, 'assignment', ownerId
+    ));
   } catch (error) { next(error); }
 });
 
@@ -263,7 +284,9 @@ staffRouter.patch('/staff/tickets/:ticketNumber/it-priority', staffOnly, async (
       fail(response, 400, 'VALIDATION_ERROR', 'Select a valid IT Priority.');
       return;
     }
-    sendMutationResult(response, await mutateTicket(String(request.params.ticketNumber), parsed.expectedUpdatedAt, { itPriority }));
+    sendMutationResult(response, await mutateTicket(
+      String(request.params.ticketNumber), parsed.expectedUpdatedAt, { itPriority }, 'it-priority'
+    ));
   } catch (error) { next(error); }
 });
 
@@ -293,6 +316,8 @@ staffRouter.patch('/staff/tickets/:ticketNumber/status', staffOnly, async (reque
       fail(response, 409, 'OWNER_REQUIRED', 'Assign an owner before moving this ticket to the selected status.');
       return;
     }
-    sendMutationResult(response, await mutateTicket(String(request.params.ticketNumber), parsed.expectedUpdatedAt, { status }));
+    sendMutationResult(response, await mutateTicket(
+      String(request.params.ticketNumber), parsed.expectedUpdatedAt, { status }, 'status'
+    ));
   } catch (error) { next(error); }
 });

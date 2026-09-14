@@ -26,6 +26,7 @@ const isolatedEnvironment = {
   ...process.env,
   DATABASE_URL: isolatedUrl.toString(),
   LAB3_SEED_INITIAL_PASSWORD: 'Lab3Automated!2026',
+  LAB3_ISOLATED_E2E: mode === 'e2e' ? '1' : '0',
   NODE_ENV: 'test'
 };
 

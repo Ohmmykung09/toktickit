@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
 import { prisma } from '../../src/db.js';
+import { setStaffMutationTestHooksForTesting } from '../../src/staff-router.js';
 import { authenticatedRequest } from '../authenticated-request.js';
 
 const prefix = 'TKT-OPS-';
@@ -36,7 +37,9 @@ async function createTicket(ownerId: number | null = null) {
 }
 
 afterEach(async () => {
+  setStaffMutationTestHooksForTesting({});
   await prisma.ticket.deleteMany({ where: { ticketNumber: { startsWith: prefix } } });
+  await prisma.user.deleteMany({ where: { email: { endsWith: '@staff-test.example' } } });
   await Promise.all(files.splice(0).map((file) => unlink(file).catch(() => undefined)));
 });
 afterAll(async () => { await prisma.$disconnect(); });
@@ -100,6 +103,48 @@ describe('Lab 3 IT Staff ticket operations', () => {
     expect([first.status, second.status].sort()).toEqual([200, 409]);
     const conflict = [first, second].find((response) => response.status === 409)!;
     expect(conflict.body.error.code).toBe('STALE_WRITE');
+  });
+
+  it.each([
+    ['deactivated', { isActive: false }],
+    ['demoted to Requester', { role: 'REQUESTER' }]
+  ] as const)('rejects assignment when the selected owner is %s before the mutation transaction', async (_case, ownerUpdate) => {
+    const { firstStaff } = await context();
+    const target = await prisma.user.create({
+      data: {
+        name: 'Paused Assignment Target',
+        email: `${randomUUID()}@staff-test.example`,
+        role: 'IT_STAFF',
+        isActive: true
+      }
+    });
+    const ticket = await createTicket(null);
+    const api = await authenticatedRequest(app, firstStaff.id);
+    let release!: () => void;
+    let entered!: () => void;
+    const transactionEntered = new Promise<void>((resolve) => { entered = resolve; });
+    const continueRequest = new Promise<void>((resolve) => { release = resolve; });
+    setStaffMutationTestHooksForTesting({
+      beforeTransaction: async (operation) => {
+        if (operation !== 'assignment') return;
+        entered();
+        await continueRequest;
+      }
+    });
+
+    const pendingAssignment = api
+      .patch(`/api/staff/tickets/${ticket.ticketNumber}/assignment`)
+      .send({ ownerId: target.id, expectedUpdatedAt: ticket.updatedAt.toISOString() })
+      .then((response) => response);
+
+    await transactionEntered;
+    await prisma.user.update({ where: { id: target.id }, data: ownerUpdate });
+    release();
+    const result = await pendingAssignment;
+
+    expect(result.status).toBe(400);
+    expect(result.body.error.code).toBe('VALIDATION_ERROR');
+    expect((await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } })).ownerId).toBeNull();
   });
 
   it('enforces the complete status transition matrix through the API', async () => {

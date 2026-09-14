@@ -10,7 +10,7 @@ const publicUserSelect = { id: true, name: true, email: true, role: true, isActi
 const maximumSerializableAttempts = 3;
 
 type AdminMutationTestHooks = {
-  beforeTransaction?: () => Promise<void>;
+  beforeTransaction?: (operation: 'create' | 'update' | 'reset') => Promise<void>;
 };
 
 let adminMutationTestHooks: AdminMutationTestHooks = {};
@@ -24,9 +24,36 @@ class AdminMutationError extends Error {
   constructor(
     public readonly status: number,
     public readonly code: string,
-    message: string
+    message: string,
+    public readonly fieldErrors?: Record<string, string>
   ) {
     super(message);
+  }
+}
+
+type LockedUser = {
+  id: number;
+  name: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+};
+
+async function lockUsers(transaction: Prisma.TransactionClient, userIds: number[]) {
+  const uniqueIds = [...new Set(userIds)].sort((left, right) => left - right);
+  return transaction.$queryRaw<LockedUser[]>(Prisma.sql`
+    SELECT "id", "name", "email", "role", "isActive"
+    FROM "User"
+    WHERE "id" IN (${Prisma.join(uniqueIds)})
+    ORDER BY "id"
+    FOR UPDATE
+  `);
+}
+
+function requireCurrentAdministrator(users: LockedUser[], actorId: number) {
+  const actor = users.find(({ id }) => id === actorId);
+  if (!actor || !actor.isActive || actor.role !== UserRole.ADMINISTRATOR) {
+    throw new AdminMutationError(403, 'FORBIDDEN', 'You do not have permission to perform this action.');
   }
 }
 
@@ -37,7 +64,10 @@ async function runSerializable<T>(operation: (transaction: Prisma.TransactionCli
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable
       });
     } catch (caught) {
-      const retryable = caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2034';
+      const retryable = caught instanceof Prisma.PrismaClientKnownRequestError && (
+        caught.code === 'P2034' ||
+        (caught.code === 'P2010' && caught.meta?.code === '40001')
+      );
       if (!retryable || attempt === maximumSerializableAttempts) throw caught;
     }
   }
@@ -103,9 +133,18 @@ adminRouter.post('/admin/users', administratorOnly, async (request, response, ne
     }
     const value = parsed.value;
     const passwordHash = await hashPassword(value.initialPassword, value.email);
-    const user = await prisma.user.create({ data: { name: value.name, email: value.email, role: value.role, isActive: value.isActive, passwordHash, passwordProvisionedAt: new Date(), mustChangePassword: true }, select: publicUserSelect });
+    await adminMutationTestHooks.beforeTransaction?.('create');
+    const user = await runSerializable(async (transaction) => {
+      const users = await lockUsers(transaction, [request.auth!.user.id]);
+      requireCurrentAdministrator(users, request.auth!.user.id);
+      return transaction.user.create({
+        data: { name: value.name, email: value.email, role: value.role, isActive: value.isActive, passwordHash, passwordProvisionedAt: new Date(), mustChangePassword: true },
+        select: publicUserSelect
+      });
+    });
     response.status(201).json(user);
   } catch (caught) {
+    if (caught instanceof AdminMutationError) { error(response, caught.status, caught.code, caught.message, caught.fieldErrors); return; }
     if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') {
       error(response, 409, 'EMAIL_ALREADY_EXISTS', 'A user with this email address already exists.');
       return;
@@ -147,9 +186,11 @@ adminRouter.patch('/admin/users/:userId', administratorOnly, async (request, res
       error(response, 400, 'VALIDATION_ERROR', 'User update is invalid.');
       return;
     }
-    await adminMutationTestHooks.beforeTransaction?.();
+    await adminMutationTestHooks.beforeTransaction?.('update');
     const user = await runSerializable(async (transaction) => {
-      const target = await transaction.user.findUnique({ where: { id: userId } });
+      const users = await lockUsers(transaction, [request.auth!.user.id, userId]);
+      requireCurrentAdministrator(users, request.auth!.user.id);
+      const target = users.find(({ id }) => id === userId);
       if (!target) throw new AdminMutationError(404, 'RESOURCE_NOT_FOUND', 'User not found.');
       if (userId === request.auth!.user.id && data.isActive === false) {
         throw new AdminMutationError(409, 'ADMIN_SAFETY_RULE', 'You cannot deactivate your own account.');
@@ -200,7 +241,7 @@ adminRouter.patch('/admin/users/:userId', administratorOnly, async (request, res
     });
     response.status(200).json(user);
   } catch (caught) {
-    if (caught instanceof AdminMutationError) { error(response, caught.status, caught.code, caught.message); return; }
+    if (caught instanceof AdminMutationError) { error(response, caught.status, caught.code, caught.message, caught.fieldErrors); return; }
     if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') { error(response, 409, 'EMAIL_ALREADY_EXISTS', 'A user with this email address already exists.'); return; }
     next(caught);
   }
@@ -210,15 +251,30 @@ adminRouter.post('/admin/users/:userId/initial-password', administratorOnly, asy
   try {
     const userId = Number(request.params.userId);
     const password = request.body && typeof request.body.initialPassword === 'string' ? request.body.initialPassword : '';
-    const target = Number.isSafeInteger(userId) && userId > 0 ? await prisma.user.findUnique({ where: { id: userId } }) : null;
-    if (!target) { error(response, 404, 'RESOURCE_NOT_FOUND', 'User not found.'); return; }
-    const validation = passwordValidationError(password, target.email);
+    if (!Number.isSafeInteger(userId) || userId <= 0) { error(response, 404, 'RESOURCE_NOT_FOUND', 'User not found.'); return; }
+    const validation = passwordValidationError(password);
     if (validation) { error(response, 400, 'VALIDATION_ERROR', validation, { initialPassword: validation }); return; }
-    const passwordHash = await hashPassword(password, target.email);
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: userId }, data: { passwordHash, passwordProvisionedAt: new Date(), mustChangePassword: true, sessionVersion: { increment: 1 }, failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null } }),
-      prisma.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })
-    ]);
+    const passwordHash = await hashPassword(password);
+    await adminMutationTestHooks.beforeTransaction?.('reset');
+    await runSerializable(async (transaction) => {
+      const users = await lockUsers(transaction, [request.auth!.user.id, userId]);
+      requireCurrentAdministrator(users, request.auth!.user.id);
+      const target = users.find(({ id }) => id === userId);
+      if (!target) throw new AdminMutationError(404, 'RESOURCE_NOT_FOUND', 'User not found.');
+      const targetValidation = passwordValidationError(password, target.email);
+      if (targetValidation) {
+        throw new AdminMutationError(400, 'VALIDATION_ERROR', targetValidation, { initialPassword: targetValidation });
+      }
+      const changedAt = new Date();
+      await transaction.user.update({
+        where: { id: userId },
+        data: { passwordHash, passwordProvisionedAt: changedAt, mustChangePassword: true, sessionVersion: { increment: 1 }, failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null }
+      });
+      await transaction.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: changedAt } });
+    });
     response.status(204).end();
-  } catch (caught) { next(caught); }
+  } catch (caught) {
+    if (caught instanceof AdminMutationError) { error(response, caught.status, caught.code, caught.message, caught.fieldErrors); return; }
+    next(caught);
+  }
 });

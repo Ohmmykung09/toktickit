@@ -23,14 +23,15 @@ No test may depend on test execution order or mutate shared seed records without
 | API-07 | API | AC-06, AC-11 | Requester Public Comments and idempotent resolution indication | Owned actions succeed without changing formal status; cross-owner and staff actions fail safely | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 branch |
 | API-08 | API | AC-07 | Queue search/filter fields with AND semantics, owner scopes, sorting, tie-breaking, and pagination | Deterministic scoped results and metadata | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
 | API-09 | API | AC-07 | Invalid, repeated, empty, out-of-range, and forbidden queue requests | Safe `400 INVALID_QUERY` or `403 FORBIDDEN` | `server/tests/lab-03/staff-queue.api.test.ts` | Passed on Issue #30 review-fix branch |
-| API-10 | API | AC-08 | Claim, unassign, active-owner assignment, reassignment, attachment metadata/download, and safe cross-ticket lookup | Valid atomic ownership and protected attachment access only | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
+| API-10 | API | AC-08 | Claim, unassign, active-owner assignment, reassignment, attachment metadata/download, safe cross-ticket lookup, and paused-request owner eligibility races | Assignment revalidates a locked active Staff/Admin owner in the mutation transaction; invalid owners and protected attachments remain inaccessible | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #34 review-fix branch |
 | API-11 | API | AC-08, AC-09 | Concurrent stale assignment/priority/status updates and Requested Priority immutability | Exactly one writer succeeds; stale writer receives `409` | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-12 | API | AC-10 | Every permitted/forbidden status transition and owner-required transition | Full matrix is enforced through the API | `server/tests/lab-03/staff-operations.api.test.ts` | Passed on Issue #31 review-fix branch |
 | API-13 | API | AC-11 | Public Comment visibility, Internal Note role restriction, and write-time actor revalidation | Requester never receives note data; only a currently active and permitted actor can write inside the authorization transaction | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 review-fix branch |
 | API-14 | API | AC-11 | Unicode message boundaries, authorship, ordering, literal rendering data, and append-only routes | Backend author/time; trimmed 1-2,000 code-point records remain ordered and immutable; malformed Unicode returns validation error | `server/tests/lab-03/comments-notes.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #32 review-fix branch |
 | API-15 | API | AC-12 | Admin list, search, role filter, create, edit, canonical email, one-role validation, and owner reconciliation | Documented user operations succeed safely; ineligible owners are unassigned without losing history | `server/tests/lab-03/admin-users.api.test.ts` | Passed on Issue #33 review-fix branch |
 | API-16 | API | AC-12, AC-13 | Email collision, password boundaries/CSRF, initial-password reset, role/edit/deactivation session revocation | Conflict/success contracts are enforced and stale sessions end | `server/tests/lab-03/admin-users.api.test.ts` | Passed on Issue #33 review-fix branch |
-| API-17 | API | AC-14 | Self-deactivation and concurrent last-active-Administrator protections | Serializable mutation permits exactly one concurrent removal and returns atomic `409 ADMIN_SAFETY_RULE` for the other | `server/tests/lab-03/admin-users.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #33 review-fix branch |
+| API-17 | API | AC-14 | Self-deactivation and concurrent last-active-Administrator protections | Serializable mutation permits one ordered removal and rejects an actor that is no longer an active Administrator | `server/tests/lab-03/admin-users.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #34 review-fix branch |
+| API-18 | Security/API | AC-12-AC-14 | Paused create, update, and initial-password reset while the acting Administrator is concurrently deactivated | Every mutation locks and revalidates the current actor inside its serializable transaction; all three unauthorized writes return `403` without changing data | `server/tests/lab-03/admin-users.api.test.ts` | Passed on isolated PostgreSQL schema on Issue #34 review-fix branch |
 | MIG-01 | Migration | AC-05 | Apply the actual migration history to empty and populated isolated PostgreSQL schemas | Lab 2 identity, Ticket/Attachment ownership, and IT Priority backfill remain correct | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-02 | Migration | AC-05, AC-16 | Seed repeat safety after editing User and lookup state | No duplicate fixtures and no user-managed state is overwritten | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
 | MIG-03 | Migration/Security | AC-01, AC-05 | Explicit provisioning, Argon2id, 12/128 password boundaries, and canonical email constraints | Missing credentials fail closed; mixed-case and duplicate canonical emails are rejected | `server/tests/lab-03/migration.integration.test.ts` | Passed on Issue #27 branch |
@@ -63,9 +64,9 @@ No test may depend on test execution order or mutate shared seed records without
 | AC-09 | API-11, UI-06, E2E-03 |
 | AC-10 | UNIT-03, API-12, UI-06, E2E-03 |
 | AC-11 | UNIT-04, API-07, API-13, API-14, UI-07, E2E-02, E2E-03 |
-| AC-12 | API-15, API-16, UI-08, E2E-04 |
-| AC-13 | API-03, API-16, UI-08, E2E-04 |
-| AC-14 | API-17, UI-08, E2E-04 |
+| AC-12 | API-15, API-16, API-18, UI-08, E2E-04 |
+| AC-13 | API-03, API-16, API-18, UI-08, E2E-04 |
+| AC-14 | API-17, API-18, UI-08, E2E-04 |
 | AC-15 | E2E-05 and completed `ui-spec.md` visual checklist |
 | AC-16 | Complete final-main regression suite and the results below |
 
@@ -122,7 +123,7 @@ npm --workspace client test -- --run tests/lab-03/AdminUsers.test.tsx
 npm run build
 ```
 
-The API test command was executed against a fresh isolated PostgreSQL schema after applying the real migration history and seed. Seven API tests passed. The Administrator UI suite passed four tests, and the client/server production build passed.
+The API test command was executed against a fresh isolated PostgreSQL schema after applying the real migration history and seed. Ten API tests passed, including paused create/update/reset authorization races. The Administrator UI suite passed four tests, and the client/server production build passed.
 
 Focused Issue #34 integrated verification:
 
@@ -134,7 +135,7 @@ npm run test:e2e:lab3
 git diff --check
 ```
 
-The isolated runner creates a uniquely named PostgreSQL schema, applies all five migration files, seeds deterministic fixtures, runs the requested suite, and drops only that schema. Playwright uses real client, server, authentication cookies, CSRF protection, and PostgreSQL data. Axe checks WCAG 2 A/AA rules while responsive helpers verify page-level overflow and save 27 screenshots.
+The isolated runner creates a uniquely named PostgreSQL schema, applies all five migration files, seeds deterministic fixtures, runs the requested suite, and drops only that schema. For the quality command, Playwright disables existing-server reuse for both ports so it cannot attach to a developer process using another database. Playwright uses real client, server, authentication cookies, CSRF protection, and PostgreSQL data. Axe checks WCAG 2 A/AA rules while responsive helpers verify page-level overflow and save 27 screenshots.
 
 ## 6. Final Results
 
@@ -142,8 +143,8 @@ These results were recorded on the Issue #34 integrated branch. Run the same com
 
 | Suite | Expected | Final result |
 | --- | --- | --- |
-| Unit, policy, API, integration, authorization, and regression tests | All pass; none skipped | 64/64 passed on isolated PostgreSQL schema |
-| React UI component and role-navigation tests | All pass; none skipped | 40/40 passed |
+| Unit, policy, API, integration, authorization, and regression tests | All pass; none skipped | 73/73 passed on isolated PostgreSQL schema |
+| React UI component and role-navigation tests | All pass; none skipped | 44/44 passed |
 | Migration and seed checks | Preserve data and pass repeat run | 5/5 migration tests passed; all 5 migration files applied before each isolated suite |
 | Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | 6/6 passed against real client/server/PostgreSQL |
 | Automated accessibility and responsive checks | WCAG 2 A/AA scan and no page-level overflow | Passed at 1440x1000, 820x1180, and 390x844 |

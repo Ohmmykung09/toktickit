@@ -106,7 +106,7 @@ describe('Lab 3 Administrator user management', () => {
     expect(forbidden.body.error.code).toBe('FORBIDDEN');
   });
 
-  it('atomically allows only one of two concurrent last-Administrator removals', async () => {
+  it('atomically allows one concurrent Administrator removal and rejects the deactivated actor', async () => {
     const primary = await prisma.user.findFirstOrThrow({ where: { role: UserRole.ADMINISTRATOR, isActive: true } });
     const extraActiveAdministrators = await prisma.user.findMany({
       where: { role: UserRole.ADMINISTRATOR, isActive: true, id: { not: primary.id } },
@@ -138,8 +138,8 @@ describe('Lab 3 Administrator user management', () => {
         primaryApi.patch(`/api/admin/users/${secondary.id}`).send({ isActive: false }),
         secondaryApi.patch(`/api/admin/users/${primary.id}`).send({ isActive: false })
       ]);
-      expect(results.map(({ status }) => status).sort()).toEqual([200, 409]);
-      expect(results.find(({ status }) => status === 409)?.body.error.code).toBe('ADMIN_SAFETY_RULE');
+      expect(results.map(({ status }) => status).sort()).toEqual([200, 403]);
+      expect(results.find(({ status }) => status === 403)?.body.error.code).toBe('FORBIDDEN');
       expect(await prisma.user.count({ where: { role: UserRole.ADMINISTRATOR, isActive: true } })).toBe(1);
     } finally {
       setAdminMutationTestHooksForTesting({});
@@ -207,4 +207,60 @@ describe('Lab 3 Administrator user management', () => {
     expect((await targetApi.get('/api/categories')).status).toBe(401);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).mustChangePassword).toBe(true);
   });
+
+  it.each(['create', 'update', 'reset'] as const)(
+    'rejects a paused %s mutation when the acting Administrator is deactivated before the transaction',
+    async (operation) => {
+      const actor = await createManagedUser(UserRole.ADMINISTRATOR, `paused.${operation}.actor`);
+      const api = await authenticatedRequest(app, actor.id);
+      const target = operation === 'create'
+        ? null
+        : await createManagedUser(UserRole.REQUESTER, `paused.${operation}.target`);
+      const createdEmail = `paused.${operation}.created@admin-test.example`;
+      const originalTarget = target
+        ? await prisma.user.findUniqueOrThrow({ where: { id: target.id } })
+        : null;
+      let release!: () => void;
+      let entered!: () => void;
+      const transactionEntered = new Promise<void>((resolve) => { entered = resolve; });
+      const continueRequest = new Promise<void>((resolve) => { release = resolve; });
+      setAdminMutationTestHooksForTesting({
+        beforeTransaction: async (currentOperation) => {
+          if (currentOperation !== operation) return;
+          entered();
+          await continueRequest;
+        }
+      });
+
+      const pendingRequest = operation === 'create'
+        ? api.post('/api/admin/users').send({
+            name: 'Blocked Create User',
+            email: createdEmail,
+            role: UserRole.REQUESTER,
+            isActive: true,
+            initialPassword: 'InitialPass123!'
+          }).then((response) => response)
+        : operation === 'update'
+          ? api.patch(`/api/admin/users/${target!.id}`).send({ name: 'Blocked Update' }).then((response) => response)
+          : api.post(`/api/admin/users/${target!.id}/initial-password`).send({ initialPassword: 'ReplacementPass123!' }).then((response) => response);
+
+      await transactionEntered;
+      await prisma.user.update({ where: { id: actor.id }, data: { isActive: false } });
+      release();
+      const result = await pendingRequest;
+
+      expect(result.status).toBe(403);
+      expect(result.body.error.code).toBe('FORBIDDEN');
+      if (operation === 'create') {
+        expect(await prisma.user.findUnique({ where: { email: createdEmail } })).toBeNull();
+      } else {
+        const storedTarget = await prisma.user.findUniqueOrThrow({ where: { id: target!.id } });
+        if (operation === 'update') expect(storedTarget.name).toBe(originalTarget!.name);
+        if (operation === 'reset') {
+          expect(storedTarget.passwordHash).toBe(originalTarget!.passwordHash);
+          expect(storedTarget.sessionVersion).toBe(originalTarget!.sessionVersion);
+        }
+      }
+    }
+  );
 });
