@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { messageCharacterCount, messageDraftError } from './message-policy';
 import { StaffWorkspace } from './StaffWorkspace';
 import { AdminWorkspace } from './AdminWorkspace';
 
@@ -423,24 +424,51 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
     event.preventDefault();
     const content = comment.trim();
     setMessage('');
-    if (!content.length || content.length > 2_000) {
-      setMessage('Public Comment must contain 1 to 2,000 characters.');
+    const validationError = messageDraftError(comment, 'Public Comment');
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
+    const knownCommentIds = new Set(ticket?.publicComments.map((item) => item.id) ?? []);
     setPosting(true);
+    let uncertainResult = true;
     try {
       const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}/public-comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content })
       });
-      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to post the Public Comment.'));
+      if (!response.ok) {
+        uncertainResult = false;
+        throw new Error(await errorMessage(response, 'Unable to post the Public Comment.'));
+      }
       const created = await response.json() as PublicComment;
       setTicket((current) => current ? { ...current, publicComments: [...current.publicComments, created] } : current);
       setComment('');
       setMessage('Public Comment posted.');
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : 'Unable to post the Public Comment.');
+      let reconciled = false;
+      if (uncertainResult) {
+        try {
+          const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}`);
+          if (response.ok) {
+            const payload = await response.json() as TicketDetail;
+            const refreshed = { ...payload, publicComments: payload.publicComments ?? [] };
+            reconciled = refreshed.publicComments.some((item) =>
+              !knownCommentIds.has(item.id) && item.author.id === requester.id && item.content === content
+            );
+            setTicket(refreshed);
+          }
+        } catch {
+          // Preserve the draft when the authoritative timeline cannot be reconciled.
+        }
+      }
+      if (reconciled) {
+        setComment('');
+        setMessage('Public Comment posted.');
+      } else {
+        setMessage(caught instanceof Error ? caught.message : 'Unable to post the Public Comment.');
+      }
     } finally {
       setPosting(false);
     }
@@ -487,8 +515,8 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
       </div>
       <form onSubmit={postComment}>
         <label className="form-label fw-semibold" htmlFor="requester-public-comment">Add Public Comment</label>
-        <textarea className="form-control" id="requester-public-comment" maxLength={2_000} onChange={(event) => setComment(event.target.value)} rows={4} value={comment} />
-        <div className="d-flex justify-content-between align-items-center gap-3 mt-2"><span className="small text-secondary">{comment.length} / 2,000</span><button className="btn btn-success" disabled={posting} type="submit">{posting ? 'Posting...' : 'Post Public Comment'}</button></div>
+        <textarea className="form-control" id="requester-public-comment" onChange={(event) => setComment(event.target.value)} rows={4} value={comment} />
+        <div className="d-flex justify-content-between align-items-center gap-3 mt-2"><span className="small text-secondary">{messageCharacterCount(comment)} / 2,000</span><button className="btn btn-success" disabled={posting} type="submit">{posting ? 'Posting...' : 'Post Public Comment'}</button></div>
       </form>
     </section>
   </section>;

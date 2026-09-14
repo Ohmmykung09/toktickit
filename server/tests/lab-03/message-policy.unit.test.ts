@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { maximumMessageLength, messageValidationError, parseMessageBody } from '../../src/message-policy.js';
+import {
+  maximumMessageLength,
+  messageCharacterCount,
+  messageValidationError,
+  parseMessageBody
+} from '../../src/message-policy.js';
 
 describe('Lab 3 message policy', () => {
   it('accepts and trims content at the exact boundaries', () => {
@@ -19,5 +24,14 @@ describe('Lab 3 message policy', () => {
       ok: false,
       error: 'Only content may be submitted.'
     });
+  });
+
+  it('counts Unicode code points and rejects malformed surrogate input', () => {
+    const emoji = '\u{1f600}';
+    expect(messageCharacterCount(emoji.repeat(maximumMessageLength))).toBe(maximumMessageLength);
+    expect(parseMessageBody({ content: emoji.repeat(maximumMessageLength) }).ok).toBe(true);
+    expect(parseMessageBody({ content: emoji.repeat(maximumMessageLength + 1) }).ok).toBe(false);
+    expect(messageValidationError('\ud800')).toBe('Content contains unsupported Unicode characters.');
+    expect(messageValidationError('\udc00')).toBe('Content contains unsupported Unicode characters.');
   });
 });

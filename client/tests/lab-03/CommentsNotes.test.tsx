@@ -81,4 +81,62 @@ describe('Lab 3 comments, notes, and resolution UI', () => {
     expect(fetch).toHaveBeenNthCalledWith(4, expect.stringContaining('/public-comments'), expect.objectContaining({ method: 'POST' }));
     expect(fetch).toHaveBeenNthCalledWith(5, expect.stringContaining('/internal-notes'), expect.objectContaining({ method: 'POST' }));
   });
+
+  it('reconciles a Requester comment committed before its response is lost', async () => {
+    const requesterDetail = { ...ticket, internalNotes: undefined };
+    const committed = {
+      id: 3,
+      content: 'Committed before response loss',
+      createdAt: '2026-09-11T10:05:00.000Z',
+      author: { id: 1, name: 'Aom S.', role: 'REQUESTER' }
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json({ items: [ticket], pagination: { page: 1, pageSize: 10, totalItems: 1, totalPages: 1 } }))
+      .mockResolvedValueOnce(json(requesterDetail))
+      .mockRejectedValueOnce(new TypeError('Network connection lost'))
+      .mockResolvedValueOnce(json({ ...requesterDetail, publicComments: [...requesterDetail.publicComments, committed] }));
+    renderAuthenticated(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'TKT-COMM-1' }));
+    const composer = screen.getByLabelText('Add Public Comment');
+    await userEvent.type(composer, committed.content);
+    await userEvent.click(screen.getByRole('button', { name: 'Post Public Comment' }));
+
+    expect(await screen.findByText(committed.content)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Public Comment posted.');
+    expect(composer).toHaveValue('');
+    expect(fetch.mock.calls.filter(([url, options]) =>
+      String(url).includes('/public-comments') && (options as RequestInit | undefined)?.method === 'POST'
+    )).toHaveLength(1);
+  });
+
+  it('reconciles a Staff Internal Note committed before its response is lost', async () => {
+    const queue = { items: [ticket], filters: { categories: [], relatedSystems: [], owners: [ticket.owner] }, pagination: { page: 1, pageSize: 20, totalItems: 1, totalPages: 1 } };
+    const committed = {
+      id: 4,
+      content: 'Committed private note before response loss',
+      createdAt: '2026-09-11T10:06:00.000Z',
+      author: ticket.owner
+    };
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json(queue))
+      .mockResolvedValueOnce(json(ticket))
+      .mockResolvedValueOnce(json([ticket.owner]))
+      .mockRejectedValueOnce(new TypeError('Network connection lost'))
+      .mockResolvedValueOnce(json({ ...ticket, internalNotes: [...ticket.internalNotes, committed] }));
+    renderAuthenticated(<App />, staffAuth);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open TKT-COMM-1' }));
+    const composer = screen.getByLabelText('Add Internal Note');
+    await userEvent.type(composer, committed.content);
+    await userEvent.click(screen.getByRole('button', { name: 'Post Internal Note' }));
+
+    expect(await screen.findByText(committed.content)).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Internal Note posted.');
+    expect(composer).toHaveValue('');
+    expect(fetch.mock.calls.filter(([url, options]) =>
+      String(url).includes('/internal-notes') && (options as RequestInit | undefined)?.method === 'POST'
+    )).toHaveLength(1);
+  });
 });
