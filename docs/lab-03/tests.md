@@ -139,7 +139,7 @@ The isolated runner creates a uniquely named PostgreSQL schema, applies all five
 
 ## 6. Final Results
 
-These results were recorded on the Issue #34 integrated branch. Run the same command again on final `main` before submission and replace the branch wording with the final commit reference.
+These results were reverified on the Issue #35 release-evidence branch after the approved PR #43 and PR #44 changes entered `lab3-staging`. Run the same command again on final `main` before submission and capture that output with the final commit reference.
 
 | Suite | Expected | Final result |
 | --- | --- | --- |
@@ -149,4 +149,4 @@ These results were recorded on the Issue #34 integrated branch. Run the same com
 | Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | 6/6 passed against real client/server/PostgreSQL |
 | Automated accessibility and responsive checks | WCAG 2 A/AA scan and no page-level overflow | Passed at 1440x1000, 820x1180, and 390x844 |
 | Client and server production build | Pass | Passed |
-| Visual checklist | Complete from final `main` | Completed on Issue #34 integrated branch; final-main confirmation required |
+| Visual checklist | Complete from final `main` | Reverified on Issue #35 release candidate; final-main confirmation required |

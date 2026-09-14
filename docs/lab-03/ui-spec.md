@@ -129,4 +129,4 @@ Screenshots are stored under `artifacts/lab-03/screenshots/authentication/`, `re
 - [x] Buttons, labels, menus, tables/items, and dialogs contain no clipped or overlapping text.
 - [x] Desktop, tablet, and mobile have no unexpected page-level horizontal overflow.
 
-The checklist was completed on the Issue #34 integrated branch using Playwright screenshots at 1440x1000, 820x1180, and 390x844. Axe reported no WCAG 2 A/AA violations on the captured major-screen states. Repeat the suite on final `main` before submission.
+The checklist was reverified on the Issue #35 release-evidence branch using Playwright screenshots at 1440x1000, 820x1180, and 390x844. Axe reported no WCAG 2 A/AA violations on the captured major-screen states. Repeat the suite on final `main` before submission.

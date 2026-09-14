@@ -24,7 +24,7 @@ toktickit/
 |- client/                       React requester application
 |- server/                       Express API and Prisma schema
 |- docs/lab-02/                  Lab 2 engineering and delivery records
-|- docs/lab-03/                  Lab 3 engineering contract and test plan
+|- docs/lab-03/                  Lab 3 contract, tests, review, and AI-use records
 |- e2e/                          Browser workflow specifications
 `- artifacts/                    Final screenshot evidence locations
 ```
@@ -116,4 +116,8 @@ npm run test:quality:lab3
 
 The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves desktop, tablet, and mobile evidence under `artifacts/lab-03/screenshots/`.
 
-The full traceability table and final evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md). The completed responsive checklist is in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md).
+The full traceability table and final evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md). The completed responsive checklist is in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md). Peer-review findings and outcomes are recorded in [docs/lab-03/reviewer.md](docs/lab-03/reviewer.md), and selected prompts with the student's reflection are recorded in [docs/lab-03/ai-use.md](docs/lab-03/ai-use.md).
+
+## Lab 3 Release Flow
+
+Lab 3 feature branches enter `lab3-staging` only through reviewed Pull Requests. After the release-evidence Issue is approved and merged, create one release Pull Request from `lab3-staging` to `main`. Rerun `npm run test:quality:lab3` from the final `main` branch and capture the passing output, final commit graph, Project board, rendered documentation, and required UI states for the submission PDF.
