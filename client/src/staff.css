@@ -44,8 +44,20 @@
 .staff-detail dd { margin: 2px 0 0; } .staff-detail dd small { display: block; color: #73857c; }
 .staff-detail aside { display: grid; gap: 14px; align-content: start; } .staff-detail aside label { display: grid; gap: 5px; font-size: .8rem; font-weight: 700; }
 .staff-detail aside select { height: 40px; padding: 6px 8px; border: 1px solid #b9ccc1; background: #fff; }
-.staff-history { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; } .staff-history article { padding: 10px 0; border-top: 1px solid #e1e9e4; }
-.staff-history article p { margin: 3px 0 0; }
+.staff-history { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 24px; }
+.staff-history > section { align-self: start; }
+.staff-history .internal-history { border-color: #d9bd72; background: #fffdf6; }
+.staff-history .history-caption, .staff-history .internal-label { margin: 2px 0 14px; color: #60736a; font-size: .8rem; }
+.staff-history .internal-label { color: #72530b; font-weight: 700; }
+.staff-history article { padding: 10px 0; border-top: 1px solid #e1e9e4; }
+.staff-history article div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.staff-history article span { color: #60736a; font-size: .75rem; }
+.staff-history article p { margin: 3px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.staff-history form { display: grid; gap: 7px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #cfddd5; }
+.staff-history form label { font-size: .8rem; font-weight: 700; }
+.staff-history form textarea { width: 100%; min-width: 0; padding: 8px; border: 1px solid #b9ccc1; background: #fff; color: #17372a; resize: vertical; }
+.staff-history form footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.staff-history form footer span { color: #60736a; font-size: .75rem; }
 .staff-attachments { margin-top: 24px; padding: 20px; border: 1px solid #cfddd5; background: #fff; }
 .staff-attachments ul { margin: 0; padding: 0; list-style: none; }
 .staff-attachments li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid #e1e9e4; }

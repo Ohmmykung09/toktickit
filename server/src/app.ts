@@ -21,6 +21,7 @@ import {
   requireRole
 } from './auth-router.js';
 import { staffRouter } from './staff-router.js';
+import { communicationRouter } from './communication-router.js';
 
 export const app = express();
 
@@ -64,6 +65,7 @@ app.use(
 const requesterOnly = requireRole(UserRole.REQUESTER);
 
 app.use('/api', staffRouter);
+app.use('/api', communicationRouter);
 
 app.get('/api/categories', async (_request, response, next) => {
   try {
@@ -297,7 +299,11 @@ app.get('/api/tickets/:ticketNumber', requesterOnly, async (request, response, n
       include: {
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
-        attachments: { orderBy: { createdAt: 'desc' } }
+        attachments: { orderBy: { createdAt: 'desc' } },
+        publicComments: {
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } }
+        }
       }
     });
     if (!ticket) {
@@ -313,9 +319,11 @@ app.get('/api/tickets/:ticketNumber', requesterOnly, async (request, response, n
       requestedPriority: displayPriority(ticket.requestedPriority),
       createdAt: ticket.createdAt,
       updatedAt: ticket.updatedAt,
+      requesterResolutionIndicatedAt: ticket.requesterResolutionIndicatedAt,
       category: ticket.category,
       relatedSystem: ticket.relatedSystem,
-      attachments: ticket.attachments.map(attachmentInfo)
+      attachments: ticket.attachments.map(attachmentInfo),
+      publicComments: ticket.publicComments
     });
   } catch (error) {
     next(error);
