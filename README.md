@@ -102,12 +102,18 @@ Build both projects:
 npm run build
 ```
 
-For the browser end-to-end flow, install the Playwright test runner and Chromium browser, then run the test while PostgreSQL is available. The configuration starts the local client and server unless they are already running.
+Install Chromium once for the Lab 3 browser tests:
 
 ```powershell
-npm install --save-dev playwright@1.62.1
 npx playwright install chromium
-npx playwright test e2e/lab-02/requester-ticket-flow.spec.ts
 ```
 
-The full traceability table, responsive checklist, and final evidence instructions are in [docs/lab-02/tests.md](docs/lab-02/tests.md).
+Run the complete Lab 3 quality gate:
+
+```powershell
+npm run test:quality:lab3
+```
+
+The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves desktop, tablet, and mobile evidence under `artifacts/lab-03/screenshots/`.
+
+The full traceability table and final evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md). The completed responsive checklist is in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md).

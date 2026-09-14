@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { messageCharacterCount, messageDraftError } from './message-policy';
 import { StaffWorkspace } from './StaffWorkspace';
+import { AdminWorkspace } from './AdminWorkspace';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
@@ -42,6 +44,15 @@ type TicketDetail = TicketListItem & {
   relatedSystem: Lookup;
   createdAt: string;
   attachments: Attachment[];
+  requesterResolutionIndicatedAt: string | null;
+  publicComments: PublicComment[];
+};
+
+type PublicComment = {
+  id: number;
+  content: string;
+  createdAt: string;
+  author: { id: number; name: string; role: string };
 };
 
 type Attachment = {
@@ -385,13 +396,22 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
   const { authenticatedFetch } = useAuth();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [comment, setComment] = useState('');
+  const [message, setMessage] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   useEffect(() => {
     async function loadTicket() {
       try {
         const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${ticketNumber}`);
         if (!response.ok) throw new Error();
-        setTicket((await response.json()) as TicketDetail);
+        const payload = await response.json() as TicketDetail;
+        setTicket({
+          ...payload,
+          requesterResolutionIndicatedAt: payload.requesterResolutionIndicatedAt ?? null,
+          publicComments: payload.publicComments ?? []
+        });
         setLoadState('ready');
       } catch {
         setLoadState('error');
@@ -400,10 +420,106 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
     void loadTicket();
   }, [authenticatedFetch, ticketNumber]);
 
+  async function postComment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = comment.trim();
+    setMessage('');
+    const validationError = messageDraftError(comment, 'Public Comment');
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+    const knownCommentIds = new Set(ticket?.publicComments.map((item) => item.id) ?? []);
+    setPosting(true);
+    let uncertainResult = true;
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}/public-comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!response.ok) {
+        uncertainResult = false;
+        throw new Error(await errorMessage(response, 'Unable to post the Public Comment.'));
+      }
+      const created = await response.json() as PublicComment;
+      setTicket((current) => current ? { ...current, publicComments: [...current.publicComments, created] } : current);
+      setComment('');
+      setMessage('Public Comment posted.');
+    } catch (caught) {
+      let reconciled = false;
+      if (uncertainResult) {
+        try {
+          const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}`);
+          if (response.ok) {
+            const payload = await response.json() as TicketDetail;
+            const refreshed = { ...payload, publicComments: payload.publicComments ?? [] };
+            reconciled = refreshed.publicComments.some((item) =>
+              !knownCommentIds.has(item.id) && item.author.id === requester.id && item.content === content
+            );
+            setTicket(refreshed);
+          }
+        } catch {
+          // Preserve the draft when the authoritative timeline cannot be reconciled.
+        }
+      }
+      if (reconciled) {
+        setComment('');
+        setMessage('Public Comment posted.');
+      } else {
+        setMessage(caught instanceof Error ? caught.message : 'Unable to post the Public Comment.');
+      }
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function indicateResolved() {
+    if (!globalThis.confirm('Confirm that the problem appears resolved? This does not change the formal ticket status.')) return;
+    setResolving(true);
+    setMessage('');
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}/problem-appears-resolved`, { method: 'POST' });
+      if (!response.ok) throw new Error(await errorMessage(response, 'Unable to record the resolution indication.'));
+      const payload = await response.json() as { requesterResolutionIndicatedAt: string };
+      setTicket((current) => current ? { ...current, requesterResolutionIndicatedAt: payload.requesterResolutionIndicatedAt } : current);
+      setMessage('Problem Appears Resolved indication recorded.');
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'Unable to record the resolution indication.');
+    } finally {
+      setResolving(false);
+    }
+  }
+
   if (loadState === 'loading') return <p role="status">Loading ticket details...</p>;
   if (loadState === 'error' || !ticket) return <div className="alert alert-danger" role="alert">Unable to load this ticket. Check that it belongs to your signed-in account.</div>;
 
-  return <section className="ticket-form-panel"><div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div><dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl><AttachmentSection initialAttachments={ticket.attachments} ticketNumber={ticket.ticketNumber} /></section>;
+  return <section className="ticket-form-panel">
+    <div className="d-flex flex-wrap justify-content-between gap-2 mb-4"><div><p className="text-success fw-semibold mb-1">{ticket.ticketNumber}</p><h1 className="h3 mb-1">{ticket.summary}</h1><p className="text-secondary mb-0">Created by {requester.name}</p></div><span className="badge text-bg-light align-self-start">{ticket.status}</span></div>
+    {message && <div className="alert alert-info" role="status">{message}</div>}
+    <dl className="row mb-0"><dt className="col-sm-3">Category</dt><dd className="col-sm-9">{ticket.category.name}</dd><dt className="col-sm-3">Related System</dt><dd className="col-sm-9">{ticket.relatedSystem.name}</dd><dt className="col-sm-3">Priority</dt><dd className="col-sm-9">{ticket.requestedPriority}</dd><dt className="col-sm-3">Description</dt><dd className="col-sm-9 text-pre-wrap">{ticket.description}</dd><dt className="col-sm-3">Last Updated</dt><dd className="col-sm-9">{new Date(ticket.updatedAt).toLocaleString()}</dd></dl>
+    <section className="resolution-indication border-top mt-4 pt-3">
+      <h2 className="h5">Resolution indication</h2>
+      {ticket.requesterResolutionIndicatedAt
+        ? <p className="alert alert-success mb-0">Problem Appears Resolved recorded {new Date(ticket.requesterResolutionIndicatedAt).toLocaleString()}.</p>
+        : <><p className="small text-secondary">Use this when the problem appears resolved. IT Staff still controls the formal ticket status.</p><button className="btn btn-outline-success" disabled={resolving} onClick={() => void indicateResolved()} type="button">{resolving ? 'Recording...' : 'Problem Appears Resolved'}</button></>}
+    </section>
+    <AttachmentSection initialAttachments={ticket.attachments} ticketNumber={ticket.ticketNumber} />
+    <section className="public-comments border-top mt-4 pt-3" aria-label="Public Comments">
+      <h2 className="h5">Public Comments</h2>
+      <p className="small text-secondary">Shared with you and authorized IT Staff.</p>
+      <div className="comment-timeline">
+        {ticket.publicComments.length
+          ? ticket.publicComments.map((item) => <article className="border-top py-3" key={item.id}><div className="d-flex flex-wrap justify-content-between gap-2"><strong>{item.author.name} <span className="fw-normal text-secondary">({item.author.role})</span></strong><time className="small text-secondary">{new Date(item.createdAt).toLocaleString()}</time></div><p className="text-pre-wrap mb-0 mt-1">{item.content}</p></article>)
+          : <p className="text-secondary">No Public Comments yet.</p>}
+      </div>
+      <form onSubmit={postComment}>
+        <label className="form-label fw-semibold" htmlFor="requester-public-comment">Add Public Comment</label>
+        <textarea className="form-control" id="requester-public-comment" onChange={(event) => setComment(event.target.value)} rows={4} value={comment} />
+        <div className="d-flex justify-content-between align-items-center gap-3 mt-2"><span className="small text-secondary">{messageCharacterCount(comment)} / 2,000</span><button className="btn btn-success" disabled={posting} type="submit">{posting ? 'Posting...' : 'Post Public Comment'}</button></div>
+      </form>
+    </section>
+  </section>;
 }
 
 function AttachmentSection({ ticketNumber, initialAttachments }: { ticketNumber: string; initialAttachments: Attachment[] }) {
@@ -547,7 +663,11 @@ export function App() {
     }
   }
 
-  if (user.role !== 'REQUESTER') {
+  if (user.role === 'ADMINISTRATOR') {
+    return <AdminWorkspace />;
+  }
+
+  if (user.role === 'IT_STAFF') {
     return <StaffWorkspace />;
   }
 

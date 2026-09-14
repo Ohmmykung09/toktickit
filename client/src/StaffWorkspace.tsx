@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { messageCharacterCount, messageDraftError } from './message-policy';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -24,6 +25,14 @@ type QueueResponse = {
   filters: { categories: Lookup[]; relatedSystems: Lookup[]; owners: Owner[] };
   pagination: { page: number; pageSize: number; totalItems: number; totalPages: number };
 };
+type TicketDetail = QueueItem & {
+  description: string;
+  createdAt: string;
+  requesterResolutionIndicatedAt: string | null;
+  attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string; removedAt: string | null; removalReason: string | null }>;
+  publicComments: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
+  internalNotes: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
+};
 
 function label(value: string) {
   return value.toLowerCase().split('_').map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(' ');
@@ -34,12 +43,161 @@ function queueErrorMessage(status: number) {
   return 'Unable to load the ticket queue. Try again.';
 }
 
+function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onBack: () => void }) {
+  const { authenticatedFetch, user } = useAuth();
+  const [ticket, setTicket] = useState<TicketDetail | null>(null);
+  const [assignees, setAssignees] = useState<Owner[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [publicContent, setPublicContent] = useState('');
+  const [internalContent, setInternalContent] = useState('');
+  const [posting, setPosting] = useState<'public' | 'internal' | null>(null);
+
+  const load = useCallback(async () => {
+    setState('loading'); setMessage('');
+    try {
+      const [ticketResponse, assigneeResponse] = await Promise.all([
+        authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticketNumber)}`),
+        authenticatedFetch(`${apiBaseUrl}/api/staff/assignees`)
+      ]);
+      if (!ticketResponse.ok || !assigneeResponse.ok) throw new Error();
+      setTicket(await ticketResponse.json() as TicketDetail);
+      setAssignees(await assigneeResponse.json() as Owner[]);
+      setState('ready');
+    } catch { setMessage('Unable to load this ticket. Try again.'); setState('error'); }
+  }, [authenticatedFetch, ticketNumber]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function update(path: string, body: Record<string, unknown>) {
+    if (!ticket) return;
+    setBusy(true); setMessage('');
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}/${path}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, expectedUpdatedAt: ticket.updatedAt })
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        setMessage(payload?.error?.message ?? 'Unable to save the ticket.');
+        if (response.status === 409) await load();
+        return;
+      }
+      setTicket(await response.json() as TicketDetail);
+      setMessage('Ticket updated.');
+    } catch { setMessage('Unable to reach TokTickIT. Try again.'); }
+    finally { setBusy(false); }
+  }
+
+  async function downloadAttachment(attachment: TicketDetail['attachments'][number]) {
+    setMessage('');
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticketNumber)}/attachments/${attachment.id}/download`);
+      if (!response.ok) { setMessage('Unable to download this attachment. It may have been removed.'); return; }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement('a');
+      anchor.href = url; anchor.download = attachment.originalFileName; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch { setMessage('Unable to download this attachment. Try again.'); }
+  }
+
+  async function postMessage(kind: 'public' | 'internal', event: FormEvent) {
+    event.preventDefault();
+    if (!ticket) return;
+    const content = (kind === 'public' ? publicContent : internalContent).trim();
+    setMessage('');
+    const messageLabel = kind === 'public' ? 'Public Comment' : 'Internal Note';
+    const validationError = messageDraftError(kind === 'public' ? publicContent : internalContent, messageLabel);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+    const knownMessageIds = new Set(
+      (kind === 'public' ? ticket.publicComments : ticket.internalNotes).map((item) => item.id)
+    );
+    setPosting(kind);
+    const path = kind === 'public'
+      ? `/api/tickets/${encodeURIComponent(ticket.ticketNumber)}/public-comments`
+      : `/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}/internal-notes`;
+    let uncertainResult = true;
+    try {
+      const response = await authenticatedFetch(`${apiBaseUrl}${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content })
+      });
+      if (!response.ok) {
+        uncertainResult = false;
+        const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+        throw new Error(payload?.error?.message ?? `Unable to post the ${messageLabel}.`);
+      }
+      const created = await response.json() as TicketDetail['publicComments'][number];
+      setTicket((current) => current ? {
+        ...current,
+        ...(kind === 'public'
+          ? { publicComments: [...current.publicComments, created] }
+          : { internalNotes: [...current.internalNotes, created] })
+      } : current);
+      if (kind === 'public') setPublicContent(''); else setInternalContent('');
+      setMessage(`${messageLabel} posted.`);
+    } catch (caught) {
+      let reconciled = false;
+      if (uncertainResult) {
+        try {
+          const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}`);
+          if (response.ok) {
+            const refreshed = await response.json() as TicketDetail;
+            const messages = kind === 'public' ? refreshed.publicComments : refreshed.internalNotes;
+            reconciled = messages.some((item) =>
+              !knownMessageIds.has(item.id) && item.author.id === user.id && item.content === content
+            );
+            setTicket(refreshed);
+          }
+        } catch {
+          // Preserve the draft when the authoritative timeline cannot be reconciled.
+        }
+      }
+      if (reconciled) {
+        if (kind === 'public') setPublicContent(''); else setInternalContent('');
+        setMessage(`${messageLabel} posted.`);
+      } else {
+        setMessage(caught instanceof Error ? caught.message : 'Unable to post the message.');
+      }
+    } finally {
+      setPosting(null);
+    }
+  }
+
+  if (state === 'loading') return <div className="queue-state" role="status">Loading ticket detail...</div>;
+  if (state === 'error' || !ticket) return <div className="queue-state queue-error" role="alert"><p>{message}</p><button className="btn btn-outline-danger" onClick={() => void load()} type="button">Retry</button></div>;
+  const allowed: Record<string, string[]> = { NEW: ['OPEN', 'IN_PROGRESS', 'CANCELLED'], OPEN: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], IN_PROGRESS: ['WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], WAITING_FOR_REQUESTER: ['IN_PROGRESS', 'RESOLVED', 'CANCELLED'], RESOLVED: ['CLOSED', 'REOPENED'], REOPENED: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'RESOLVED', 'CANCELLED'], CLOSED: ['REOPENED'], CANCELLED: [] };
+
+  return <section className="staff-detail">
+    <button className="btn btn-link text-success px-0" onClick={onBack} type="button">Back to queue</button>
+    <header><div><span>{ticket.ticketNumber}</span><h1>{ticket.summary}</h1></div><strong>{label(ticket.status)}</strong></header>
+    {message && <div className="alert alert-info" role="status">{message}</div>}
+    <div className="staff-detail-grid">
+      <article><h2>Request information</h2><dl><div><dt>Requester</dt><dd>{ticket.requester.name}<small>{ticket.requester.email}</small></dd></div><div><dt>Category</dt><dd>{ticket.category.name}</dd></div><div><dt>Related system</dt><dd>{ticket.relatedSystem.name}</dd></div><div><dt>Requested priority</dt><dd>{label(ticket.requestedPriority)}</dd></div></dl><h3>Description</h3><p>{ticket.description}</p></article>
+      <aside><h2>Ticket controls</h2>
+        <label>Owner<select aria-label="Ticket owner" disabled={busy} onChange={(event) => void update('assignment', { ownerId: event.target.value ? Number(event.target.value) : null })} value={ticket.owner?.id ?? ''}><option value="">Unassigned</option>{assignees.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></label>
+        <button className="btn btn-outline-success btn-sm" disabled={busy || ticket.owner?.id === user.id} onClick={() => void update('assignment', { ownerId: user.id })} type="button">Claim ticket</button>
+        <label>IT Priority<select aria-label="Set IT priority" disabled={busy} onChange={(event) => void update('it-priority', { itPriority: event.target.value })} value={ticket.itPriority}>{priorities.map((priority) => <option key={priority} value={priority}>{label(priority)}</option>)}</select></label>
+        <label>Status<select aria-label="Set ticket status" disabled={busy || allowed[ticket.status].length === 0} onChange={(event) => { const next = event.target.value; if (['RESOLVED', 'CLOSED', 'CANCELLED', 'REOPENED'].includes(next) && !globalThis.confirm(`Confirm status change to ${label(next)}?`)) return; void update('status', { status: next }); }} value=""><option value="">Choose transition</option>{allowed[ticket.status].map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
+      </aside>
+    </div>
+    <section className="staff-attachments"><h2>Attachments</h2>{ticket.attachments.length ? <ul>{ticket.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.originalFileName}</strong><span>{Math.ceil(attachment.sizeBytes / 1024)} KB · {attachment.mimeType}</span></div>{attachment.removedAt ? <p>Removed: {attachment.removalReason ?? 'No reason recorded.'}</p> : <button className="btn btn-sm btn-outline-success" onClick={() => void downloadAttachment(attachment)} type="button">Download</button>}</li>)}</ul> : <p>No attachments.</p>}</section>
+    <div className="staff-history">
+      <section className="public-history" aria-label="Public Comments"><h2>Public Comments</h2><p className="history-caption">Shared with the Requester and authorized staff.</p>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Public Comments yet.</p>}<form onSubmit={(event) => void postMessage('public', event)}><label htmlFor="staff-public-comment">Add Public Comment</label><textarea id="staff-public-comment" onChange={(event) => setPublicContent(event.target.value)} rows={4} value={publicContent} /><footer><span>{messageCharacterCount(publicContent)} / 2,000</span><button className="btn btn-success btn-sm" disabled={posting !== null} type="submit">{posting === 'public' ? 'Posting...' : 'Post Public Comment'}</button></footer></form></section>
+      <section className="internal-history" aria-label="Internal Notes"><h2>Internal Notes</h2><p className="internal-label">Internal - not visible to Requester</p>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Internal Notes yet.</p>}<form onSubmit={(event) => void postMessage('internal', event)}><label htmlFor="staff-internal-note">Add Internal Note</label><textarea id="staff-internal-note" onChange={(event) => setInternalContent(event.target.value)} rows={4} value={internalContent} /><footer><span>{messageCharacterCount(internalContent)} / 2,000</span><button className="btn btn-warning btn-sm" disabled={posting !== null} type="submit">{posting === 'internal' ? 'Posting...' : 'Post Internal Note'}</button></footer></form></section>
+    </div>
+  </section>;
+}
+
 export function StaffWorkspace() {
   const { authenticatedFetch } = useAuth();
   const [result, setResult] = useState<QueueResponse | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [message, setMessage] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedTicketNumber, setSelectedTicketNumber] = useState('');
   const [query, setQuery] = useState({ search: '', categoryId: '', relatedSystemId: '', status: '', requestedPriority: '', itPriority: '', owner: '', sortBy: 'updatedAt', sortOrder: 'desc', pageSize: '20' });
 
   const load = useCallback(async (requestedPage = page) => {
@@ -75,6 +233,7 @@ export function StaffWorkspace() {
     <main className="staff-page min-vh-100">
       <nav className="staff-nav"><strong>TokTickIT</strong><span>IT Staff Ticket Queue</span></nav>
       <section className="staff-layout">
+        {selectedTicketNumber ? <StaffTicketDetail ticketNumber={selectedTicketNumber} onBack={() => setSelectedTicketNumber('')} /> : <>
         <header className="staff-header"><div><h1>Ticket Queue</h1><p>Search, prioritize, and open service requests.</p></div>{result && <strong>{result.pagination.totalItems} tickets</strong>}</header>
         <form className="queue-controls" onSubmit={submit}>
           <label className="queue-search">Search<input aria-label="Search tickets" onChange={(event) => update('search', event.target.value)} placeholder="Ticket, summary, requester" value={query.search} /></label>
@@ -93,9 +252,10 @@ export function StaffWorkspace() {
         {state === 'error' && <div className="queue-state queue-error" role="alert"><p>{message}</p><button className="btn btn-outline-danger" onClick={() => void load(page)} type="button">Retry</button></div>}
         {state === 'ready' && result?.items.length === 0 && <div className="queue-state"><h2>{hasFilters ? 'No matching tickets' : 'No tickets yet'}</h2><p>{hasFilters ? 'Adjust the filters and try again.' : 'New service requests will appear here.'}</p></div>}
         {state === 'ready' && result && result.items.length > 0 && <>
-          <div className="queue-table-wrap"><table className="queue-table"><thead><tr><th>Ticket</th><th>Summary</th><th>Requester</th><th>Category</th><th>Requested</th><th>IT</th><th>Status</th><th>Owner</th><th>Updated</th><th></th></tr></thead><tbody>{result.items.map((ticket) => <tr key={ticket.ticketNumber}><td><strong>{ticket.ticketNumber}</strong></td><td>{ticket.summary}</td><td>{ticket.requester.name}<small>{ticket.requester.email}</small></td><td>{ticket.category.name}</td><td><span className="queue-tag">{label(ticket.requestedPriority)}</span></td><td><span className="queue-tag queue-tag-it">{label(ticket.itPriority)}</span></td><td>{label(ticket.status)}</td><td>{ticket.owner?.name ?? 'Unassigned'}</td><td>{new Date(ticket.updatedAt).toLocaleDateString()}</td><td><button className="btn btn-sm btn-outline-success" type="button">Open</button></td></tr>)}</tbody></table></div>
-          <div className="queue-cards">{result.items.map((ticket) => <article key={ticket.ticketNumber}><div><strong>{ticket.ticketNumber}</strong><span>{label(ticket.status)}</span></div><h2>{ticket.summary}</h2><p>{ticket.requester.name} · {ticket.category.name}</p><dl><div><dt>Requested</dt><dd>{label(ticket.requestedPriority)}</dd></div><div><dt>IT Priority</dt><dd>{label(ticket.itPriority)}</dd></div><div><dt>Owner</dt><dd>{ticket.owner?.name ?? 'Unassigned'}</dd></div></dl><button className="btn btn-sm btn-outline-success" type="button">Open ticket</button></article>)}</div>
+          <div className="queue-table-wrap"><table className="queue-table"><thead><tr><th>Ticket</th><th>Summary</th><th>Requester</th><th>Category</th><th>Requested</th><th>IT</th><th>Status</th><th>Owner</th><th>Updated</th><th></th></tr></thead><tbody>{result.items.map((ticket) => <tr key={ticket.ticketNumber}><td><strong>{ticket.ticketNumber}</strong></td><td>{ticket.summary}</td><td>{ticket.requester.name}<small>{ticket.requester.email}</small></td><td>{ticket.category.name}</td><td><span className="queue-tag">{label(ticket.requestedPriority)}</span></td><td><span className="queue-tag queue-tag-it">{label(ticket.itPriority)}</span></td><td>{label(ticket.status)}</td><td>{ticket.owner?.name ?? 'Unassigned'}</td><td>{new Date(ticket.updatedAt).toLocaleDateString()}</td><td><button aria-label={`Open ${ticket.ticketNumber}`} className="btn btn-sm btn-outline-success" onClick={() => setSelectedTicketNumber(ticket.ticketNumber)} type="button">Open</button></td></tr>)}</tbody></table></div>
+          <div className="queue-cards">{result.items.map((ticket) => <article key={ticket.ticketNumber}><div><strong>{ticket.ticketNumber}</strong><span>{label(ticket.status)}</span></div><h2>{ticket.summary}</h2><p>{ticket.requester.name} · {ticket.category.name}</p><dl><div><dt>Requested</dt><dd>{label(ticket.requestedPriority)}</dd></div><div><dt>IT Priority</dt><dd>{label(ticket.itPriority)}</dd></div><div><dt>Owner</dt><dd>{ticket.owner?.name ?? 'Unassigned'}</dd></div></dl><button aria-label={`Open ${ticket.ticketNumber} mobile`} className="btn btn-sm btn-outline-success" onClick={() => setSelectedTicketNumber(ticket.ticketNumber)} type="button">Open ticket</button></article>)}</div>
           <footer className="queue-pagination"><button className="btn btn-outline-success btn-sm" disabled={page <= 1} onClick={() => void load(page - 1)} type="button">Previous</button><span>Page {result.pagination.page} of {Math.max(result.pagination.totalPages, 1)}</span><button className="btn btn-outline-success btn-sm" disabled={page >= result.pagination.totalPages} onClick={() => void load(page + 1)} type="button">Next</button></footer>
+        </>}
         </>}
       </section>
     </main>
