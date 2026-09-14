@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { messageCharacterCount, messageDraftError } from './message-policy';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -105,21 +106,28 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
     if (!ticket) return;
     const content = (kind === 'public' ? publicContent : internalContent).trim();
     setMessage('');
-    if (!content.length || content.length > 2_000) {
-      setMessage(`${kind === 'public' ? 'Public Comment' : 'Internal Note'} must contain 1 to 2,000 characters.`);
+    const messageLabel = kind === 'public' ? 'Public Comment' : 'Internal Note';
+    const validationError = messageDraftError(kind === 'public' ? publicContent : internalContent, messageLabel);
+    if (validationError) {
+      setMessage(validationError);
       return;
     }
+    const knownMessageIds = new Set(
+      (kind === 'public' ? ticket.publicComments : ticket.internalNotes).map((item) => item.id)
+    );
     setPosting(kind);
     const path = kind === 'public'
       ? `/api/tickets/${encodeURIComponent(ticket.ticketNumber)}/public-comments`
       : `/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}/internal-notes`;
+    let uncertainResult = true;
     try {
       const response = await authenticatedFetch(`${apiBaseUrl}${path}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content })
       });
       if (!response.ok) {
+        uncertainResult = false;
         const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        throw new Error(payload?.error?.message ?? `Unable to post the ${kind === 'public' ? 'Public Comment' : 'Internal Note'}.`);
+        throw new Error(payload?.error?.message ?? `Unable to post the ${messageLabel}.`);
       }
       const created = await response.json() as TicketDetail['publicComments'][number];
       setTicket((current) => current ? {
@@ -129,9 +137,30 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
           : { internalNotes: [...current.internalNotes, created] })
       } : current);
       if (kind === 'public') setPublicContent(''); else setInternalContent('');
-      setMessage(`${kind === 'public' ? 'Public Comment' : 'Internal Note'} posted.`);
+      setMessage(`${messageLabel} posted.`);
     } catch (caught) {
-      setMessage(caught instanceof Error ? caught.message : 'Unable to post the message.');
+      let reconciled = false;
+      if (uncertainResult) {
+        try {
+          const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticket.ticketNumber)}`);
+          if (response.ok) {
+            const refreshed = await response.json() as TicketDetail;
+            const messages = kind === 'public' ? refreshed.publicComments : refreshed.internalNotes;
+            reconciled = messages.some((item) =>
+              !knownMessageIds.has(item.id) && item.author.id === user.id && item.content === content
+            );
+            setTicket(refreshed);
+          }
+        } catch {
+          // Preserve the draft when the authoritative timeline cannot be reconciled.
+        }
+      }
+      if (reconciled) {
+        if (kind === 'public') setPublicContent(''); else setInternalContent('');
+        setMessage(`${messageLabel} posted.`);
+      } else {
+        setMessage(caught instanceof Error ? caught.message : 'Unable to post the message.');
+      }
     } finally {
       setPosting(null);
     }
@@ -156,8 +185,8 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
     </div>
     <section className="staff-attachments"><h2>Attachments</h2>{ticket.attachments.length ? <ul>{ticket.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.originalFileName}</strong><span>{Math.ceil(attachment.sizeBytes / 1024)} KB · {attachment.mimeType}</span></div>{attachment.removedAt ? <p>Removed: {attachment.removalReason ?? 'No reason recorded.'}</p> : <button className="btn btn-sm btn-outline-success" onClick={() => void downloadAttachment(attachment)} type="button">Download</button>}</li>)}</ul> : <p>No attachments.</p>}</section>
     <div className="staff-history">
-      <section className="public-history" aria-label="Public Comments"><h2>Public Comments</h2><p className="history-caption">Shared with the Requester and authorized staff.</p>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Public Comments yet.</p>}<form onSubmit={(event) => void postMessage('public', event)}><label htmlFor="staff-public-comment">Add Public Comment</label><textarea id="staff-public-comment" maxLength={2_000} onChange={(event) => setPublicContent(event.target.value)} rows={4} value={publicContent} /><footer><span>{publicContent.length} / 2,000</span><button className="btn btn-success btn-sm" disabled={posting !== null} type="submit">{posting === 'public' ? 'Posting...' : 'Post Public Comment'}</button></footer></form></section>
-      <section className="internal-history" aria-label="Internal Notes"><h2>Internal Notes</h2><p className="internal-label">Internal - not visible to Requester</p>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Internal Notes yet.</p>}<form onSubmit={(event) => void postMessage('internal', event)}><label htmlFor="staff-internal-note">Add Internal Note</label><textarea id="staff-internal-note" maxLength={2_000} onChange={(event) => setInternalContent(event.target.value)} rows={4} value={internalContent} /><footer><span>{internalContent.length} / 2,000</span><button className="btn btn-warning btn-sm" disabled={posting !== null} type="submit">{posting === 'internal' ? 'Posting...' : 'Post Internal Note'}</button></footer></form></section>
+      <section className="public-history" aria-label="Public Comments"><h2>Public Comments</h2><p className="history-caption">Shared with the Requester and authorized staff.</p>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Public Comments yet.</p>}<form onSubmit={(event) => void postMessage('public', event)}><label htmlFor="staff-public-comment">Add Public Comment</label><textarea id="staff-public-comment" onChange={(event) => setPublicContent(event.target.value)} rows={4} value={publicContent} /><footer><span>{messageCharacterCount(publicContent)} / 2,000</span><button className="btn btn-success btn-sm" disabled={posting !== null} type="submit">{posting === 'public' ? 'Posting...' : 'Post Public Comment'}</button></footer></form></section>
+      <section className="internal-history" aria-label="Internal Notes"><h2>Internal Notes</h2><p className="internal-label">Internal - not visible to Requester</p>{ticket.internalNotes.length ? ticket.internalNotes.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Internal Notes yet.</p>}<form onSubmit={(event) => void postMessage('internal', event)}><label htmlFor="staff-internal-note">Add Internal Note</label><textarea id="staff-internal-note" onChange={(event) => setInternalContent(event.target.value)} rows={4} value={internalContent} /><footer><span>{messageCharacterCount(internalContent)} / 2,000</span><button className="btn btn-warning btn-sm" disabled={posting !== null} type="submit">{posting === 'internal' ? 'Posting...' : 'Post Internal Note'}</button></footer></form></section>
     </div>
   </section>;
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { app } from '../../src/app.js';
+import { setCommunicationTestHooksForTesting } from '../../src/communication-router.js';
 import { prisma } from '../../src/db.js';
 import { authenticatedRequest } from '../authenticated-request.js';
 
@@ -38,6 +39,7 @@ async function createTicket(requesterId: number) {
 }
 
 afterEach(async () => {
+  setCommunicationTestHooksForTesting({});
   await prisma.ticket.deleteMany({ where: { ticketNumber: { startsWith: prefix } } });
 });
 afterAll(async () => { await prisma.$disconnect(); });
@@ -93,6 +95,60 @@ describe('Lab 3 Public Comments, Internal Notes, and resolution indication', () 
     expect(crossPost.body).toEqual(missing.body);
   });
 
+  it('accepts 2,000 Unicode code points and rejects 2,001 or malformed input safely', async () => {
+    const { owner } = await context();
+    const ticket = await createTicket(owner.id);
+    const ownerApi = await authenticatedRequest(app, owner.id);
+    const emoji = '\u{1f600}';
+
+    const boundary = await ownerApi.post(`/api/tickets/${ticket.ticketNumber}/public-comments`)
+      .send({ content: emoji.repeat(2_000) });
+    const oversized = await ownerApi.post(`/api/tickets/${ticket.ticketNumber}/public-comments`)
+      .send({ content: emoji.repeat(2_001) });
+    const malformed = await ownerApi.post(`/api/tickets/${ticket.ticketNumber}/public-comments`)
+      .send({ content: '\ud800' });
+
+    expect(boundary.status).toBe(201);
+    expect(Array.from(boundary.body.content)).toHaveLength(2_000);
+    expect(oversized.status).toBe(400);
+    expect(malformed.status).toBe(400);
+    expect(malformed.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects a Public Comment when the Requester is deactivated before the write transaction', async () => {
+    const { owner } = await context();
+    const ticket = await createTicket(owner.id);
+    const ownerApi = await authenticatedRequest(app, owner.id);
+    let enterHook!: () => void;
+    let releaseHook!: () => void;
+    const entered = new Promise<void>((resolve) => { enterHook = resolve; });
+    const released = new Promise<void>((resolve) => { releaseHook = resolve; });
+    setCommunicationTestHooksForTesting({
+      beforeWriteTransaction: async (kind, actorId) => {
+        if (kind === 'public' && actorId === owner.id) {
+          enterHook();
+          await released;
+        }
+      }
+    });
+
+    try {
+      const pending = ownerApi.post(`/api/tickets/${ticket.ticketNumber}/public-comments`)
+        .send({ content: 'Must not survive deactivation.' })
+        .then((response) => response);
+      await entered;
+      await prisma.user.update({ where: { id: owner.id }, data: { isActive: false } });
+      releaseHook();
+      const response = await pending;
+
+      expect(response.status).toBe(403);
+      expect(await prisma.publicComment.count({ where: { ticketId: ticket.id } })).toBe(0);
+    } finally {
+      releaseHook();
+      await prisma.user.update({ where: { id: owner.id }, data: { isActive: true } });
+    }
+  });
+
   it('allows only staff roles to create/read append-only Internal Notes', async () => {
     const { owner, staff, administrator } = await context();
     const ticket = await createTicket(owner.id);
@@ -136,6 +192,40 @@ describe('Lab 3 Public Comments, Internal Notes, and resolution indication', () 
     const boundary = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/internal-notes`).send({ content: 'x'.repeat(2_000) });
     expect(boundary.status).toBe(201);
     expect(boundary.body.content).toHaveLength(2_000);
+  });
+
+  it('rejects an Internal Note when Staff is demoted before the write transaction', async () => {
+    const { owner, staff } = await context();
+    const ticket = await createTicket(owner.id);
+    const staffApi = await authenticatedRequest(app, staff.id);
+    let enterHook!: () => void;
+    let releaseHook!: () => void;
+    const entered = new Promise<void>((resolve) => { enterHook = resolve; });
+    const released = new Promise<void>((resolve) => { releaseHook = resolve; });
+    setCommunicationTestHooksForTesting({
+      beforeWriteTransaction: async (kind, actorId) => {
+        if (kind === 'internal' && actorId === staff.id) {
+          enterHook();
+          await released;
+        }
+      }
+    });
+
+    try {
+      const pending = staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/internal-notes`)
+        .send({ content: 'Must not survive a role change.' })
+        .then((response) => response);
+      await entered;
+      await prisma.user.update({ where: { id: staff.id }, data: { role: 'REQUESTER' } });
+      releaseHook();
+      const response = await pending;
+
+      expect(response.status).toBe(403);
+      expect(await prisma.internalNote.count({ where: { ticketId: ticket.id } })).toBe(0);
+    } finally {
+      releaseHook();
+      await prisma.user.update({ where: { id: staff.id }, data: { role: 'IT_STAFF' } });
+    }
   });
 
   it('records the Requester resolution indication idempotently without changing formal status', async () => {
