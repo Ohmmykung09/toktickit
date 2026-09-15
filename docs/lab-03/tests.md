@@ -74,13 +74,13 @@ No test may depend on test execution order or mutate shared seed records without
 
 - Confirm Public Comments and Internal Notes cannot be visually confused.
 - Confirm every role sees only its permitted navigation and direct URLs remain backend-protected.
-- Inspect Login, Change Password, Requester, Queue, Staff Detail, and User Management at all three required viewports.
+- Inspect Login, Change Password, Requester, Queue, Staff Detail, and User Management at the authoritative desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844 viewports.
 - Confirm badge text, editable/read-only treatment, focus, validation placement, dialogs, and error states.
 - Confirm no screenshot contains credentials, cookies, CSRF tokens, personal secrets, or unrelated local data.
 
 ## 5. Final Verification Commands
 
-Run from final `main` after installing dependencies and preparing the documented local database. The quality scripts create, migrate, seed, and remove their own isolated PostgreSQL schemas:
+Run from final `main` after installing dependencies and preparing the documented local database. The quality scripts create, migrate, seed, and remove their own isolated PostgreSQL schemas. The E2E stage must produce evidence at exactly 1440 x 1000, 820 x 1180, and 390 x 844:
 
 ```powershell
 npm run prisma:generate
@@ -139,7 +139,7 @@ The isolated runner creates a uniquely named PostgreSQL schema, applies all five
 
 ## 6. Final Results
 
-These results were recorded on the Issue #34 integrated branch. Run the same command again on final `main` before submission and replace the branch wording with the final commit reference.
+These results were reverified on the Issue #35 release-evidence branch after the approved PR #43 and PR #44 changes entered `lab3-staging`. Run the same command again on final `main` before submission and capture that output with the final commit reference.
 
 | Suite | Expected | Final result |
 | --- | --- | --- |
@@ -147,6 +147,6 @@ These results were recorded on the Issue #34 integrated branch. Run the same com
 | React UI component and role-navigation tests | All pass; none skipped | 44/44 passed |
 | Migration and seed checks | Preserve data and pass repeat run | 5/5 migration tests passed; all 5 migration files applied before each isolated suite |
 | Playwright authentication, Requester, staff, admin, and responsive E2E | All pass | 6/6 passed against real client/server/PostgreSQL |
-| Automated accessibility and responsive checks | WCAG 2 A/AA scan and no page-level overflow | Passed at 1440x1000, 820x1180, and 390x844 |
+| Automated accessibility and responsive checks | WCAG 2 A/AA scan and no page-level overflow | Passed at 1440 x 1000, 820 x 1180, and 390 x 844 |
 | Client and server production build | Pass | Passed |
-| Visual checklist | Complete from final `main` | Completed on Issue #34 integrated branch; final-main confirmation required |
+| Visual checklist | Complete from final `main` | Reverified on Issue #35 release candidate; final-main confirmation required |
