@@ -45,4 +45,4 @@ Review comments were treated as test cases. Concurrency, authorization, migratio
 - [x] Review-driven security and concurrency changes have automated regression coverage.
 - [x] The integrated `lab3-staging` tree contains the approved Lab 3 increments.
 - [ ] Add the final release PR URL and approval to the submitted PDF after `lab3-staging` is reviewed into `main`.
-- [ ] Capture the passing final-main quality output and commit graph after the release merge.
+- [ ] Capture the passing final-main quality output, the 1440 x 1000, 820 x 1180, and 390 x 844 responsive evidence, and the commit graph after the release merge.

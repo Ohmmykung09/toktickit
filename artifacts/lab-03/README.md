@@ -1,14 +1,14 @@
 # Lab 3 Screenshot Evidence
 
-The Playwright suite generates these screenshots from real browser workflows against an isolated PostgreSQL schema. No credential values, session cookies, CSRF tokens, or password field contents are exposed in the images.
+The Playwright suite generates these screenshots from real browser workflows against an isolated PostgreSQL schema. No credential values, session cookies, CSRF tokens, or password field contents are exposed in the images. The authoritative evidence viewports are desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844.
 
 | Evidence group | Screens | Viewports |
 | --- | --- | --- |
-| `authentication/` | Login and mandatory Change Password | Desktop, tablet, mobile |
-| `requester/` | My Tickets, Create Ticket, and Ticket Detail | Desktop, tablet, mobile |
-| `staff-queue/` | IT Staff Ticket Queue | Desktop, tablet, mobile |
-| `staff-ticket-detail/` | IT Staff Ticket Detail with Public Comments and Internal Notes | Desktop, tablet, mobile |
-| `user-management/` | User list and Create User | Desktop, tablet, mobile |
+| `authentication/` | Login and mandatory Change Password | 1440 x 1000, 820 x 1180, 390 x 844 |
+| `requester/` | My Tickets, Create Ticket, and Ticket Detail | 1440 x 1000, 820 x 1180, 390 x 844 |
+| `staff-queue/` | IT Staff Ticket Queue | 1440 x 1000, 820 x 1180, 390 x 844 |
+| `staff-ticket-detail/` | IT Staff Ticket Detail with Public Comments and Internal Notes | 1440 x 1000, 820 x 1180, 390 x 844 |
+| `user-management/` | User list and Create User | 1440 x 1000, 820 x 1180, 390 x 844 |
 
 Regenerate all evidence from the repository root:
 

@@ -114,7 +114,7 @@ Run the complete Lab 3 quality gate:
 npm run test:quality:lab3
 ```
 
-The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves desktop, tablet, and mobile evidence under `artifacts/lab-03/screenshots/`.
+The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves evidence at the authoritative desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844 viewports under `artifacts/lab-03/screenshots/`.
 
 The full traceability table and final evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md). The completed responsive checklist is in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md). Peer-review findings and outcomes are recorded in [docs/lab-03/reviewer.md](docs/lab-03/reviewer.md), and selected prompts with the student's reflection are recorded in [docs/lab-03/ai-use.md](docs/lab-03/ai-use.md).
 

@@ -108,7 +108,7 @@ Status, Requested Priority, IT Priority, role, active/inactive state, and remove
 
 ## 11. Responsive Inspection Matrix
 
-Final inspection is performed on `main` at desktop 1440 x 900, tablet 768 x 1024, and mobile 390 x 844 for:
+The authoritative Lab 3 evidence viewports are desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844. The Playwright evidence helper and final inspection on `main` must use these exact dimensions for:
 
 - Login and mandatory Change Password.
 - Authenticated shell for each role.
@@ -129,4 +129,4 @@ Screenshots are stored under `artifacts/lab-03/screenshots/authentication/`, `re
 - [x] Buttons, labels, menus, tables/items, and dialogs contain no clipped or overlapping text.
 - [x] Desktop, tablet, and mobile have no unexpected page-level horizontal overflow.
 
-The checklist was reverified on the Issue #35 release-evidence branch using Playwright screenshots at 1440x1000, 820x1180, and 390x844. Axe reported no WCAG 2 A/AA violations on the captured major-screen states. Repeat the suite on final `main` before submission.
+The checklist was reverified on the Issue #35 release-evidence branch using Playwright screenshots at 1440 x 1000, 820 x 1180, and 390 x 844. Axe reported no WCAG 2 A/AA violations on the captured major-screen states. Repeat the suite on final `main` before submission.
