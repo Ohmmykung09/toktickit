@@ -1,4 +1,10 @@
-import type { PrismaClient, RequestedPriority, TicketStatus, UserRole } from '@prisma/client';
+import type {
+  ActionTakenStatus,
+  PrismaClient,
+  RequestedPriority,
+  TicketStatus,
+  UserRole
+} from '@prisma/client';
 import {
   argon2idOptions,
   hashPassword,
@@ -154,6 +160,128 @@ const seedTickets: ReadonlyArray<{
   }
 ];
 
+const seedActions: ReadonlyArray<{
+  fixtureKey: string;
+  ticketNumber: string;
+  actionDateTime: Date;
+  description: string;
+  result: string;
+  status: ActionTakenStatus;
+  assigneeEmail: string | null;
+  performedByEmail: string;
+  followUpRequired: boolean;
+  followUpNote: string | null;
+  attachmentNotes: string | null;
+  completedAt: Date | null;
+  cancelledAt: Date | null;
+}> = [
+  {
+    fixtureKey: 'lab4-action-9002-01',
+    ticketNumber: 'TKT-20260911-9002',
+    actionDateTime: new Date('2026-09-11T08:15:00.000Z'),
+    description: 'Checked the laptop battery health and power-management settings.',
+    result: 'Battery health is degraded; a replacement request was prepared.',
+    status: 'COMPLETED',
+    assigneeEmail: 'ploy.it@example.test',
+    performedByEmail: 'ploy.it@example.test',
+    followUpRequired: true,
+    followUpNote: 'Confirm the replacement schedule with the requester.',
+    attachmentNotes: 'Look for the battery diagnostic screenshot.',
+    completedAt: new Date('2026-09-11T08:30:00.000Z'),
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9003-01',
+    ticketNumber: 'TKT-20260911-9003',
+    actionDateTime: new Date('2026-09-11T08:45:00.000Z'),
+    description: 'Reviewed the access-point logs for repeated client disconnects.',
+    result: 'The affected access point shows repeated radio resets.',
+    status: 'IN_PROGRESS',
+    assigneeEmail: 'ton.it@example.test',
+    performedByEmail: 'ton.it@example.test',
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+    completedAt: null,
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9003-02',
+    ticketNumber: 'TKT-20260911-9003',
+    actionDateTime: new Date('2026-09-11T09:10:00.000Z'),
+    description: 'Applied a temporary channel change and started a stability check.',
+    result: 'The temporary change reduced disconnects during the first observation period.',
+    status: 'WAITING_FOR_REQUESTER',
+    assigneeEmail: 'ton.it@example.test',
+    performedByEmail: 'ploy.it@example.test',
+    followUpRequired: true,
+    followUpNote: 'Ask the requester to confirm stability from the affected area.',
+    attachmentNotes: 'Look for the wireless stability capture.',
+    completedAt: null,
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9005-01',
+    ticketNumber: 'TKT-20260911-9005',
+    actionDateTime: new Date('2026-09-11T09:20:00.000Z'),
+    description: 'Updated the VPN profile and verified a new connection.',
+    result: 'The requester connected successfully and the VPN route was verified.',
+    status: 'COMPLETED',
+    assigneeEmail: 'ploy.it@example.test',
+    performedByEmail: 'ploy.it@example.test',
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+    completedAt: new Date('2026-09-11T09:35:00.000Z'),
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9006-01',
+    ticketNumber: 'TKT-20260911-9006',
+    actionDateTime: new Date('2026-09-11T10:00:00.000Z'),
+    description: 'Cleared the stuck printer queue and restarted the print service.',
+    result: 'The queued document printed successfully.',
+    status: 'COMPLETED',
+    assigneeEmail: 'ton.it@example.test',
+    performedByEmail: 'ton.it@example.test',
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+    completedAt: new Date('2026-09-11T10:15:00.000Z'),
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9007-01',
+    ticketNumber: 'TKT-20260911-9007',
+    actionDateTime: new Date('2026-09-11T10:30:00.000Z'),
+    description: 'Compared the returned course-page error with the previous deployment.',
+    result: 'A deployment difference was found and additional requester confirmation is needed.',
+    status: 'WAITING_FOR_REQUESTER',
+    assigneeEmail: 'mint.it@example.test',
+    performedByEmail: 'mint.it@example.test',
+    followUpRequired: true,
+    followUpNote: 'Request the affected course code and browser details.',
+    attachmentNotes: null,
+    completedAt: null,
+    cancelledAt: null
+  },
+  {
+    fixtureKey: 'lab4-action-9008-01',
+    ticketNumber: 'TKT-20260911-9008',
+    actionDateTime: new Date('2026-09-11T10:45:00.000Z'),
+    description: 'Reviewed the duplicate access request against the original ticket.',
+    result: 'The duplicate request was confirmed and no further work was required.',
+    status: 'CANCELLED',
+    assigneeEmail: 'ploy.it@example.test',
+    performedByEmail: 'ploy.it@example.test',
+    followUpRequired: false,
+    followUpNote: null,
+    attachmentNotes: null,
+    completedAt: null,
+    cancelledAt: new Date('2026-09-11T10:50:00.000Z')
+  }
+];
+
 export function assertValidInitialPassword(password: string) {
   const validationError = passwordValidationError(password);
   if (validationError) throw new Error(`LAB3_SEED_INITIAL_PASSWORD: ${validationError}`);
@@ -255,6 +383,11 @@ export async function seedDatabase(prisma: PrismaClient, initialPassword: string
         requestedPriority: fixture.requestedPriority,
         itPriority: fixture.itPriority,
         status: fixture.status,
+        resolutionCycle: 1,
+        resolvedAt:
+          fixture.status === 'RESOLVED' || fixture.status === 'CLOSED'
+            ? new Date('2026-09-11T09:35:00.000Z')
+            : null,
         requesterResolutionIndicatedAt: indicatedAt,
         requesterResolutionIndicatedById: indicatedAt ? requester.id : null
       }
@@ -287,11 +420,44 @@ export async function seedDatabase(prisma: PrismaClient, initialPassword: string
     }
   }
 
+  for (const fixture of seedActions) {
+    const ticket = await prisma.ticket.findUnique({ where: { ticketNumber: fixture.ticketNumber } });
+    const creator = usersByEmail.get(fixture.performedByEmail);
+    const performer = usersByEmail.get(fixture.performedByEmail);
+    const assignee = fixture.assigneeEmail ? usersByEmail.get(fixture.assigneeEmail) : null;
+    if (!ticket || !creator || !performer || (fixture.assigneeEmail && !assignee)) {
+      throw new Error(`Seed references are incomplete for ${fixture.fixtureKey}.`);
+    }
+
+    await prisma.actionTaken.upsert({
+      where: { fixtureKey: fixture.fixtureKey },
+      update: {},
+      create: {
+        fixtureKey: fixture.fixtureKey,
+        ticketId: ticket.id,
+        actionDateTime: fixture.actionDateTime,
+        description: fixture.description,
+        result: fixture.result,
+        status: fixture.status,
+        resolutionCycle: 1,
+        assigneeId: assignee?.id ?? null,
+        createdById: creator.id,
+        performedById: performer.id,
+        followUpRequired: fixture.followUpRequired,
+        followUpNote: fixture.followUpNote,
+        attachmentNotes: fixture.attachmentNotes,
+        completedAt: fixture.completedAt,
+        cancelledAt: fixture.cancelledAt
+      }
+    });
+  }
+
   return {
     categories: categoryNames.length,
     relatedSystems: relatedSystemNames.length,
     users: seedUsers.length,
     tickets: seedTickets.length,
+    actionsTaken: seedActions.length,
     provisionedUsers: provisionedUsers.count
   };
 }
