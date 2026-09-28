@@ -232,4 +232,20 @@ describe('Lab 4 Actions Taken migration and seed', () => {
       ).resolves.toMatchObject({ summary: 'User-managed ticket summary' });
     });
   });
+
+  it('preserves Action Taken audit history when a parent Ticket deletion is requested', async () => {
+    await withIsolatedSchema(async (client) => {
+      await applyMigrations(client);
+      await seedDatabase(client, validInitialPassword);
+
+      const action = await client.actionTaken.findUniqueOrThrow({
+        where: { fixtureKey: 'lab4-action-9002-01' }
+      });
+
+      await expect(client.ticket.delete({ where: { id: action.ticketId } })).rejects.toThrow();
+      await expect(
+        client.actionTaken.findUnique({ where: { id: action.id } })
+      ).resolves.toMatchObject({ id: action.id, ticketId: action.ticketId });
+    });
+  });
 });

@@ -1,4 +1,6 @@
 -- Add the Lab 4 Actions Taken foundation without rewriting Lab 1 to Lab 3 data.
+BEGIN;
+
 CREATE TYPE "ActionTakenStatus" AS ENUM (
   'OPEN',
   'IN_PROGRESS',
@@ -62,7 +64,7 @@ CREATE INDEX "ActionTaken_performedById_actionDateTime_idx"
 
 ALTER TABLE "ActionTaken"
   ADD CONSTRAINT "ActionTaken_ticketId_fkey"
-  FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "ActionTaken"
   ADD CONSTRAINT "ActionTaken_assigneeId_fkey"
   FOREIGN KEY ("assigneeId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -72,3 +74,5 @@ ALTER TABLE "ActionTaken"
 ALTER TABLE "ActionTaken"
   ADD CONSTRAINT "ActionTaken_performedById_fkey"
   FOREIGN KEY ("performedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+COMMIT;
