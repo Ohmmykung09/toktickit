@@ -25,7 +25,7 @@ const pageSizes = [10, 20, 50] as const;
 const sortFields = ['createdAt', 'updatedAt', 'ticketNumber', 'requestedPriority', 'itPriority', 'status'] as const;
 const staffTicketSelect = {
   ticketNumber: true, summary: true, description: true, requestedPriority: true, itPriority: true,
-  status: true, requesterResolutionIndicatedAt: true, createdAt: true, updatedAt: true,
+  status: true, resolutionCycle: true, resolvedAt: true, requesterResolutionIndicatedAt: true, createdAt: true, updatedAt: true,
   requester: { select: { id: true, name: true, email: true } },
   owner: { select: { id: true, name: true, role: true } },
   category: { select: { id: true, name: true } },
@@ -253,11 +253,93 @@ async function mutateTicket(
   });
 }
 
+async function mutateTicketStatus(ticketNumber: string, expectedUpdatedAt: Date, status: TicketStatus) {
+  await staffMutationTestHooks.beforeTransaction?.('status');
+  return prisma.$transaction(async (transaction) => {
+    const locked = await transaction.$queryRaw<Array<{
+      id: number;
+      status: TicketStatus;
+      ownerId: number | null;
+      resolutionCycle: number;
+      resolvedAt: Date | null;
+      updatedAt: Date;
+    }>>(Prisma.sql`
+      SELECT "id", "status", "ownerId", "resolutionCycle", "resolvedAt", "updatedAt"
+      FROM "Ticket"
+      WHERE "ticketNumber" = ${ticketNumber}
+      FOR UPDATE
+    `);
+    const existing = locked[0];
+    if (!existing) return { kind: 'missing' as const };
+    if (existing.status === status) return { kind: 'same-status' as const };
+    if (!canTransition(existing.status, status)) return { kind: 'invalid-transition' as const };
+
+    if (transitionRequiresOwner(status)) {
+      const owner = existing.ownerId === null ? [] : await transaction.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+        SELECT "id"
+        FROM "User"
+        WHERE "id" = ${existing.ownerId}
+          AND "isActive" = true
+          AND "role" IN ('IT_STAFF'::"UserRole", 'ADMINISTRATOR'::"UserRole")
+        FOR UPDATE
+      `);
+      if (!owner[0]) return { kind: 'owner-required' as const };
+    }
+
+    if (status === TicketStatus.RESOLVED) {
+      const qualifyingAction = await transaction.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+        SELECT "id"
+        FROM "ActionTaken"
+        WHERE "ticketId" = ${existing.id}
+          AND "resolutionCycle" = ${existing.resolutionCycle}
+          AND "status" = 'COMPLETED'::"ActionTakenStatus"
+          AND "completedAt" IS NOT NULL
+          AND CHAR_LENGTH(BTRIM("result")) > 0
+        LIMIT 1
+      `);
+      if (!qualifyingAction[0]) return { kind: 'resolution-required' as const };
+    }
+
+    const data: Prisma.TicketUncheckedUpdateManyInput = { status };
+    if (status === TicketStatus.RESOLVED) data.resolvedAt = new Date();
+    if (status === TicketStatus.REOPENED) {
+      data.resolutionCycle = { increment: 1 };
+      data.resolvedAt = null;
+    }
+    const updated = await transaction.ticket.updateMany({
+      where: { id: existing.id, updatedAt: expectedUpdatedAt },
+      data
+    });
+    if (updated.count === 0) return { kind: 'conflict' as const };
+    const ticket = await transaction.ticket.findUniqueOrThrow({ where: { id: existing.id }, select: staffTicketSelect });
+    return { kind: 'updated' as const, ticket };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 function sendMutationResult(response: Parameters<Parameters<typeof staffRouter.patch>[1]>[1], result: Awaited<ReturnType<typeof mutateTicket>>) {
   if (result.kind === 'missing') return fail(response, 404, 'RESOURCE_NOT_FOUND', 'Ticket not found.');
   if (result.kind === 'invalid-owner') return fail(response, 400, 'VALIDATION_ERROR', 'The selected owner is not active or permitted.');
   if (result.kind === 'conflict') return fail(response, 409, 'STALE_WRITE', 'The ticket changed. Reload it before saving again.');
   response.status(200).json(result.ticket);
+}
+
+function sendStatusMutationResult(
+  response: Parameters<Parameters<typeof staffRouter.patch>[1]>[1],
+  result: Awaited<ReturnType<typeof mutateTicketStatus>>
+) {
+  if (result.kind === 'missing') return fail(response, 404, 'RESOURCE_NOT_FOUND', 'Ticket not found.');
+  if (result.kind === 'same-status') return fail(response, 400, 'VALIDATION_ERROR', 'The ticket already has this status.');
+  if (result.kind === 'invalid-transition') return fail(response, 409, 'INVALID_STATUS_TRANSITION', 'The requested Ticket status transition is not permitted.');
+  if (result.kind === 'owner-required') return fail(response, 409, 'OWNER_REQUIRED', 'Assign an active owner before moving this Ticket to the selected status.');
+  if (result.kind === 'resolution-required') return fail(response, 409, 'RESOLUTION_ACTION_REQUIRED', 'Complete a qualifying Action Taken for the current resolution cycle before resolving this Ticket.');
+  if (result.kind === 'conflict') return fail(response, 409, 'STALE_WRITE', 'The ticket changed. Reload it before saving again.');
+  response.status(200).json(result.ticket);
+}
+
+function isSerializationConflict(error: unknown) {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: string; meta?: { code?: string } };
+  return candidate.code === 'P2034' || (candidate.code === 'P2010' && candidate.meta?.code === '40001');
 }
 
 staffRouter.patch('/staff/tickets/:ticketNumber/assignment', staffOnly, async (request, response, next) => {
@@ -299,25 +381,14 @@ staffRouter.patch('/staff/tickets/:ticketNumber/status', staffOnly, async (reque
       fail(response, 400, 'VALIDATION_ERROR', 'Select a valid ticket status.');
       return;
     }
-    const ticket = await prisma.ticket.findUnique({ where: { ticketNumber: String(request.params.ticketNumber) }, select: { status: true, ownerId: true } });
-    if (!ticket) {
-      fail(response, 404, 'RESOURCE_NOT_FOUND', 'Ticket not found.');
-      return;
-    }
-    if (ticket.status === status) {
-      fail(response, 400, 'VALIDATION_ERROR', 'The ticket already has this status.');
-      return;
-    }
-    if (!canTransition(ticket.status, status)) {
-      fail(response, 409, 'INVALID_STATUS_TRANSITION', `A ticket cannot move from ${ticket.status} to ${status}.`);
-      return;
-    }
-    if (transitionRequiresOwner(status) && ticket.ownerId === null) {
-      fail(response, 409, 'OWNER_REQUIRED', 'Assign an owner before moving this ticket to the selected status.');
-      return;
-    }
-    sendMutationResult(response, await mutateTicket(
-      String(request.params.ticketNumber), parsed.expectedUpdatedAt, { status }, 'status'
+    sendStatusMutationResult(response, await mutateTicketStatus(
+      String(request.params.ticketNumber), parsed.expectedUpdatedAt, status
     ));
-  } catch (error) { next(error); }
+  } catch (error) {
+    if (isSerializationConflict(error)) {
+      fail(response, 409, 'STALE_WRITE', 'The ticket changed. Reload it before saving again.');
+      return;
+    }
+    next(error);
+  }
 });

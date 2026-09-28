@@ -38,7 +38,14 @@ async function createTicket(ownerId: number | null = null) {
 
 afterEach(async () => {
   setStaffMutationTestHooksForTesting({});
-  await prisma.ticket.deleteMany({ where: { ticketNumber: { startsWith: prefix } } });
+  const testTickets = await prisma.ticket.findMany({
+    where: { ticketNumber: { startsWith: prefix } },
+    select: { id: true }
+  });
+  await prisma.actionTaken.deleteMany({
+    where: { ticketId: { in: testTickets.map(({ id }) => id) } }
+  });
+  await prisma.ticket.deleteMany({ where: { id: { in: testTickets.map(({ id }) => id) } } });
   await prisma.user.deleteMany({ where: { email: { endsWith: '@staff-test.example' } } });
   await Promise.all(files.splice(0).map((file) => unlink(file).catch(() => undefined)));
 });
@@ -156,6 +163,24 @@ describe('Lab 3 IT Staff ticket operations', () => {
       for (const target of statuses) {
         const updatedAt = new Date(1_700_000_000_000 + clock++ * 1000);
         await prisma.ticket.update({ where: { id: ticket.id }, data: { status: source as never, ownerId: firstStaff.id, updatedAt } });
+        if (target === 'RESOLVED') {
+          const current = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id }, select: { resolutionCycle: true } });
+          await prisma.actionTaken.deleteMany({ where: { ticketId: ticket.id } });
+          await prisma.actionTaken.create({
+            data: {
+              ticketId: ticket.id,
+              actionDateTime: new Date('2026-09-29T07:00:00.000Z'),
+              description: 'Qualifying status-matrix action.',
+              result: 'The requested work was completed.',
+              status: 'COMPLETED',
+              resolutionCycle: current.resolutionCycle,
+              assigneeId: firstStaff.id,
+              createdById: firstStaff.id,
+              performedById: firstStaff.id,
+              completedAt: new Date('2026-09-29T07:05:00.000Z')
+            }
+          });
+        }
         const response = await api.patch(`/api/staff/tickets/${ticket.ticketNumber}/status`).send({ status: target, expectedUpdatedAt: updatedAt.toISOString() });
         if (source === target) { expect(response.status, `${source} -> ${target}`).toBe(400); }
         else if (transitions[source].includes(target)) { expect(response.status, `${source} -> ${target}`).toBe(200); }
