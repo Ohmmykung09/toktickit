@@ -79,8 +79,13 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
-        setMessage(payload?.error?.message ?? 'Unable to save the ticket.');
-        if (response.status === 409) await load();
+        const failureMessage = payload?.error?.message ?? 'Unable to save the ticket.';
+        if (response.status === 409) {
+          await load();
+          setMessage(failureMessage);
+        } else {
+          setMessage(failureMessage);
+        }
         return;
       }
       setTicket(await response.json() as TicketDetail);
