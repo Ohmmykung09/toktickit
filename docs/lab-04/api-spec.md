@@ -80,6 +80,8 @@ The list is ordered by `actionDateTime ASC, id ASC`. Cross-owner Requester acces
 
 Allowed roles: IT Staff and Administrator.
 
+The request must include a valid UUID `Idempotency-Key` header. Repeating the same key for the same Ticket and the same Action details returns the original Action with `200 OK` and creates no duplicate. Reusing the key with different Action details returns `409 IDEMPOTENCY_CONFLICT`.
+
 Request:
 
 ```json
@@ -121,7 +123,7 @@ Request:
 }
 ```
 
-Response `200`: the authoritative updated Action Taken. Assignment and status changes use the same endpoint. `COMPLETED` requires an active assignee and non-empty `result`; the server sets `completedAt` and increments `version`. `CANCELLED` sets `cancelledAt`. A stale `expectedVersion` returns `409 STALE_WRITE` and leaves the stored record unchanged.
+Response `200`: the authoritative updated Action Taken. Assignment and status changes use the same endpoint. `COMPLETED` requires an active assignee and non-empty `result`; the server sets `completedAt` and increments `version`. `CANCELLED` sets `cancelledAt`. An empty `attachmentNotes` value clears the stored note. A PATCH containing only the current `expectedVersion` is a no-op and does not change audit identity, timestamps, or `version`. A stale `expectedVersion` returns `409 STALE_WRITE` and leaves the stored record unchanged.
 
 Allowed Action transitions are `OPEN -> IN_PROGRESS|WAITING_FOR_REQUESTER|COMPLETED|CANCELLED`, `IN_PROGRESS -> WAITING_FOR_REQUESTER|COMPLETED|CANCELLED`, and `WAITING_FOR_REQUESTER -> IN_PROGRESS|COMPLETED|CANCELLED`. Terminal Actions reject further updates with `409 ACTION_TERMINAL`. A requester or inactive assignee returns `409 INACTIVE_ASSIGNEE`; a required missing assignee returns `409 ASSIGNEE_REQUIRED`.
 

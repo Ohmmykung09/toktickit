@@ -59,6 +59,15 @@ function optionalTrimmedText(value: unknown, maximum: number) {
   return Array.from(text).length <= maximum ? text || null : null;
 }
 
+function validOptionalText(value: unknown, maximum: number) {
+  return value === null || value === undefined
+    || (typeof value === 'string' && Array.from(value.trim()).length <= maximum);
+}
+
+function validIdempotencyKey(value: string | undefined): value is string {
+  return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
+}
+
 function validDate(value: unknown) {
   if (typeof value !== 'string' || Number.isNaN(Date.parse(value))) return null;
   const date = new Date(value);
@@ -95,7 +104,7 @@ function parseCreateBody(body: unknown) {
     fieldErrors.followUpNote = 'Follow-up Note must be empty when follow-up is not required.';
   }
   const attachmentNotes = optionalTrimmedText(input.attachmentNotes, 2000);
-  if (input.attachmentNotes !== undefined && input.attachmentNotes !== null && attachmentNotes === null) {
+  if (!validOptionalText(input.attachmentNotes, 2000)) {
     fieldErrors.attachmentNotes = 'Attachment Notes must contain at most 2,000 characters.';
   }
   const assigneeId = input.assigneeId === undefined ? null : validAssigneeId(input.assigneeId);
@@ -166,7 +175,7 @@ function parseUpdateBody(body: unknown) {
   let attachmentNotes: string | null | undefined;
   if ('attachmentNotes' in input) {
     attachmentNotes = optionalTrimmedText(input.attachmentNotes, 2000);
-    if (input.attachmentNotes !== null && input.attachmentNotes !== undefined && attachmentNotes === null) {
+    if (!validOptionalText(input.attachmentNotes, 2000)) {
       fieldErrors.attachmentNotes = 'Attachment Notes must contain at most 2,000 characters.';
     }
   }
@@ -208,6 +217,7 @@ function sendMutationOutcome(response: Response, outcome: string) {
   if (outcome === 'invalid-transition') return fail(response, 409, 'INVALID_ACTION_TRANSITION', 'The Action Taken transition is not permitted.');
   if (outcome === 'inactive-assignee') return fail(response, 409, 'INACTIVE_ASSIGNEE', 'The selected assignee is not an active staff user.');
   if (outcome === 'assignee-required') return fail(response, 409, 'ASSIGNEE_REQUIRED', 'An active assignee is required for this Action Taken status.');
+  if (outcome === 'idempotency-conflict') return fail(response, 409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used for different Action Taken details.');
   return false;
 }
 
@@ -241,6 +251,11 @@ actionsTakenRouter.get('/tickets/:ticketNumber/actions-taken', async (request, r
 
 actionsTakenRouter.post('/staff/tickets/:ticketNumber/actions-taken', staffOnly, async (request, response, next) => {
   try {
+    const idempotencyKey = request.header('Idempotency-Key');
+    if (!validIdempotencyKey(idempotencyKey)) {
+      fail(response, 400, 'VALIDATION_ERROR', 'A valid Idempotency-Key header is required.');
+      return;
+    }
     const parsed = parseCreateBody(request.body);
     if (!parsed.input) {
       fail(response, 400, 'VALIDATION_ERROR', 'Action Taken details are invalid.', parsed.fieldErrors);
@@ -253,6 +268,22 @@ actionsTakenRouter.post('/staff/tickets/:ticketNumber/actions-taken', staffOnly,
         select: { id: true, resolutionCycle: true }
       });
       if (!ticket) return { outcome: 'not-found' as const };
+      const existing = await transaction.actionTaken.findUnique({
+        where: { ticketId_idempotencyKey: { ticketId: ticket.id, idempotencyKey } },
+        select: actionSelect
+      });
+      if (existing) {
+        const samePayload = existing.actionDateTime.getTime() === input.actionDateTime.getTime()
+          && existing.description === input.description
+          && existing.result === input.result
+          && existing.assignee?.id === input.assigneeId
+          && existing.followUpRequired === input.followUpRequired
+          && existing.followUpNote === input.followUpNote
+          && existing.attachmentNotes === input.attachmentNotes;
+        return samePayload
+          ? { outcome: 'replayed' as const, action: existing }
+          : { outcome: 'idempotency-conflict' as const };
+      }
       if (input.assigneeId !== null && !(await activeAssignee(transaction, input.assigneeId))) {
         return { outcome: 'inactive-assignee' as const };
       }
@@ -268,14 +299,15 @@ actionsTakenRouter.post('/staff/tickets/:ticketNumber/actions-taken', staffOnly,
           performedById: request.auth!.user.id,
           followUpRequired: input.followUpRequired,
           followUpNote: input.followUpNote,
-          attachmentNotes: input.attachmentNotes
+          attachmentNotes: input.attachmentNotes,
+          idempotencyKey
         },
         select: actionSelect
       });
       return { outcome: 'created' as const, action };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     if (sendMutationOutcome(response, result.outcome)) return;
-    response.status(201).json(result.action);
+    response.status(result.outcome === 'replayed' ? 200 : 201).json(result.action);
   } catch (error) {
     if (isSerializationConflict(error)) {
       fail(response, 409, 'STALE_WRITE', 'The Action Taken changed. Reload it before saving again.');
@@ -312,6 +344,12 @@ actionsTakenRouter.patch('/staff/tickets/:ticketNumber/actions-taken/:actionId',
       const action = await transaction.actionTaken.findUnique({ where: { id: actionId } });
       if (!action) return { outcome: 'not-found' as const };
       if (action.version !== input.expectedVersion) return { outcome: 'stale' as const };
+      if (Object.keys(input).length === 1) {
+        return {
+          outcome: 'unchanged' as const,
+          action: await transaction.actionTaken.findUniqueOrThrow({ where: { id: action.id }, select: actionSelect })
+        };
+      }
       if (terminalStatuses.some((terminalStatus) => terminalStatus === action.status)) return { outcome: 'terminal' as const };
 
       const nextStatus = input.status ?? action.status;

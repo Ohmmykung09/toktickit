@@ -73,8 +73,9 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     const staffApi = await authenticatedRequest(app, staff.id);
     const ownerApi = await authenticatedRequest(app, owner.id);
     const otherApi = await authenticatedRequest(app, otherRequester.id);
+    const idempotencyKey = randomUUID();
 
-    const created = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`).send({
+    const payload = {
       actionDateTime: recentActionDate(),
       assigneeId: staff.id,
       description: 'Checked the access point logs.',
@@ -83,7 +84,10 @@ describe('Lab 4 Actions Taken API and authorization', () => {
       followUpNote: 'Confirm stability with the requester.',
       performedById: otherRequester.id,
       createdById: otherRequester.id
-    });
+    };
+    const created = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
 
     expect(created.status).toBe(201);
     expect(created.body).toMatchObject({
@@ -103,6 +107,18 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     expect(staffList.status).toBe(200);
     expect(crossOwnerList.status).toBe(404);
     expect(crossOwnerList.body.error.code).toBe('RESOURCE_NOT_FOUND');
+
+    const replay = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send(payload);
+    const conflict = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', idempotencyKey)
+      .send({ ...payload, result: 'A different retry payload.' });
+    expect(replay.status).toBe(200);
+    expect(replay.body.id).toBe(created.body.id);
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(1);
   });
 
   it('rejects Requester mutations and invalid follow-up data without partial writes', async () => {
@@ -111,19 +127,23 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     const ownerApi = await authenticatedRequest(app, owner.id);
     const staffApi = await authenticatedRequest(app, staff.id);
 
-    const invalid = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`).send({
+    const invalid = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
       actionDateTime: '2026-09-29T08:30:00.000Z',
       description: 'Invalid follow-up fixture',
       result: 'It must be rejected.',
       followUpRequired: true
-    });
+      });
     expect(invalid.status).toBe(400);
     expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(0);
 
-    const requesterCreate = await ownerApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`).send({
+    const requesterCreate = await ownerApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
       description: 'Requester must not create this.',
       result: 'Forbidden.'
-    });
+      });
     expect(requesterCreate.status).toBe(403);
     expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(0);
   });
@@ -132,12 +152,14 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     const { owner, staff } = await context();
     const ticket = await createTicket(owner.id, staff.id);
     const staffApi = await authenticatedRequest(app, staff.id);
-    const created = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`).send({
+    const created = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
       actionDateTime: recentActionDate(),
       description: 'Prepare a completion update.',
       result: 'The action is ready to complete.',
       assigneeId: staff.id
-    });
+      });
     expect(created.status).toBe(201);
 
     const [first, second] = await Promise.all([
@@ -159,6 +181,32 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     expect(completed.body).toMatchObject({ status: 'COMPLETED', version: 2, completedAt: expect.any(String) });
   });
 
+  it('allows attachment notes to be cleared and treats expectedVersion-only updates as no-ops', async () => {
+    const { owner, staff } = await context();
+    const ticket = await createTicket(owner.id, staff.id);
+    const staffApi = await authenticatedRequest(app, staff.id);
+    const created = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
+        actionDateTime: recentActionDate(),
+        description: 'Prepare a clear operation.',
+        result: 'The stored note can be cleared.',
+        attachmentNotes: 'Remove this note.',
+        assigneeId: staff.id
+      });
+    expect(created.status).toBe(201);
+
+    const cleared = await staffApi.patch(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken/${created.body.id}`)
+      .send({ expectedVersion: 1, attachmentNotes: '' });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body).toMatchObject({ attachmentNotes: null, version: 2 });
+    const unchanged = await staffApi.patch(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken/${created.body.id}`)
+      .send({ expectedVersion: 2 });
+    expect(unchanged.status).toBe(200);
+    expect(unchanged.body).toMatchObject({ attachmentNotes: null, version: 2, performedBy: { id: staff.id } });
+    expect(unchanged.body.updatedAt).toBe(cleared.body.updatedAt);
+  });
+
   it('rejects an inactive assignee inside the mutation transaction', async () => {
     const { owner, staff } = await context();
     const inactive = await prisma.user.create({
@@ -167,12 +215,14 @@ describe('Lab 4 Actions Taken API and authorization', () => {
     createdUsers.push(inactive.id);
     const ticket = await createTicket(owner.id, staff.id);
     const staffApi = await authenticatedRequest(app, staff.id);
-    const response = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`).send({
+    const response = await staffApi.post(`/api/staff/tickets/${ticket.ticketNumber}/actions-taken`)
+      .set('Idempotency-Key', randomUUID())
+      .send({
       actionDateTime: recentActionDate(),
       description: 'Try inactive assignment.',
       result: 'This must not be assigned.',
       assigneeId: inactive.id
-    });
+      });
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe('INACTIVE_ASSIGNEE');
   });

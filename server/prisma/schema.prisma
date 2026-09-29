@@ -106,6 +106,7 @@ model ActionTaken {
   completedAt      DateTime?
   cancelledAt      DateTime?
   version          Int               @default(1)
+  idempotencyKey   String?
   fixtureKey       String?           @unique
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -118,6 +119,7 @@ model ActionTaken {
   @@index([ticketId, resolutionCycle, status, completedAt])
   @@index([assigneeId, status, updatedAt])
   @@index([performedById, actionDateTime])
+  @@unique([ticketId, idempotencyKey])
 }
 
 model Session {

@@ -20,7 +20,8 @@ const migrationFiles = [
   new URL('../../prisma/migrations/20260901000000_lab2_review_fixes/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260911100000_bind_session_version/migration.sql', import.meta.url),
-  new URL('../../prisma/migrations/20260928000000_lab4_action_taken_foundation/migration.sql', import.meta.url)
+  new URL('../../prisma/migrations/20260928000000_lab4_action_taken_foundation/migration.sql', import.meta.url),
+  new URL('../../prisma/migrations/20260929000000_lab4_action_taken_idempotency/migration.sql', import.meta.url)
 ];
 const validInitialPassword = 'Lab3TestPass!';
 const categoryNameForPreservation = 'Account and Access';
@@ -140,8 +141,9 @@ describe('Lab 3 isolated migration and seed', () => {
 
       await applySqlFile(client, migrationFiles[3]);
       // The generated Prisma client includes the current Lab 4 schema. Apply the
-      // Lab 4 foundation before using typed client queries in this legacy-data test.
+      // Lab 4 migrations before using typed client queries in this legacy-data test.
       await applySqlFile(client, migrationFiles[5]);
+      await applySqlFile(client, migrationFiles[6]);
 
       const migratedUser = await client.user.findUniqueOrThrow({ where: { id: requester.id } });
       const migratedTicket = await client.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
