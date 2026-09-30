@@ -32,7 +32,8 @@ const staffTicketSelect = {
   relatedSystem: { select: { id: true, name: true } },
   attachments: { orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }], select: { id: true, originalFileName: true, mimeType: true, sizeBytes: true, createdAt: true, removedAt: true, removalReason: true } },
   publicComments: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } },
-  internalNotes: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } }
+  internalNotes: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } },
+  actionsTaken: { orderBy: [{ actionDateTime: 'asc' as const }, { id: 'asc' as const }], select: { id: true, actionDateTime: true, status: true, description: true, result: true, assignee: { select: { id: true, name: true, role: true } }, createdBy: { select: { id: true, name: true, role: true } }, performedBy: { select: { id: true, name: true, role: true } }, followUpRequired: true, followUpNote: true, attachmentNotes: true, version: true, completedAt: true, cancelledAt: true } }
 } satisfies Prisma.TicketSelect;
 
 function fail(response: Parameters<Parameters<typeof staffRouter.get>[1]>[1], status: number, code: string, message: string) {

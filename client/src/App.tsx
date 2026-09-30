@@ -3,13 +3,15 @@ import { useAuth } from './AuthGate';
 import { messageCharacterCount, messageDraftError } from './message-policy';
 import { StaffWorkspace } from './StaffWorkspace';
 import { AdminWorkspace } from './AdminWorkspace';
+import { ActionsTakenPanel } from './ActionsTakenPanel';
+import { RequesterDashboard } from './Dashboard';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
 type Category = Lookup;
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type HealthStatus = 'idle' | 'loading' | 'online' | 'offline';
-type View = 'tickets' | 'create' | 'detail';
+type View = 'dashboard' | 'tickets' | 'create' | 'detail';
 
 type TicketForm = {
   categoryId: string;
@@ -46,6 +48,7 @@ type TicketDetail = TicketListItem & {
   attachments: Attachment[];
   requesterResolutionIndicatedAt: string | null;
   publicComments: PublicComment[];
+  actionsTaken?: import('./ActionsTakenPanel').ActionTaken[];
 };
 
 type PublicComment = {
@@ -504,6 +507,7 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
         ? <p className="alert alert-success mb-0">Problem Appears Resolved recorded {new Date(ticket.requesterResolutionIndicatedAt).toLocaleString()}.</p>
         : <><p className="small text-secondary">Use this when the problem appears resolved. IT Staff still controls the formal ticket status.</p><button className="btn btn-outline-success" disabled={resolving} onClick={() => void indicateResolved()} type="button">{resolving ? 'Recording...' : 'Problem Appears Resolved'}</button></>}
     </section>
+    <ActionsTakenPanel initialActions={ticket.actionsTaken ?? []} ticketNumber={ticket.ticketNumber} editable={false} />
     <AttachmentSection initialAttachments={ticket.attachments} ticketNumber={ticket.ticketNumber} />
     <section className="public-comments border-top mt-4 pt-3" aria-label="Public Comments">
       <h2 className="h5">Public Comments</h2>
@@ -677,6 +681,7 @@ export function App() {
         <div className="container flex-wrap gap-2">
           <span className="navbar-brand fw-bold text-success">TokTickIT</span>
           <div className="d-flex flex-wrap gap-1 align-items-center">
+            <button aria-label="Open Dashboard" className={`btn btn-sm ${view === 'dashboard' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('dashboard')} type="button">Dashboard</button>
             <button aria-label="Open My Tickets" className={`btn btn-sm ${view === 'tickets' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('tickets')} type="button">My Tickets</button>
             <button aria-label="Open Create Ticket" className={`btn btn-sm ${view === 'create' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('create')} type="button">Create Ticket</button>
             <button className="btn btn-primary btn-sm" disabled={healthStatus === 'loading'} onClick={checkSystem} type="button">Check System</button>
@@ -687,6 +692,7 @@ export function App() {
         {healthStatus === 'loading' && <p role="status">Loading system status...</p>}
         {healthStatus === 'online' && <div className="alert alert-success" role="status"><strong>System Status:</strong> Online<p className="mb-0">TokTickIT API is online.</p>{categories.length > 0 && <><h2 className="h6 mt-3">Supported Request Categories</h2><ol className="mb-0">{categories.map((category) => <li key={category.id}>{category.name}</li>)}</ol></>}</div>}
         {healthStatus === 'offline' && <div className="alert alert-danger" role="alert"><strong>System Status:</strong> Offline<p className="mb-0">Unable to connect to TokTickIT API.</p></div>}
+        {view === 'dashboard' && <RequesterDashboard onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
         {view === 'create' && <CreateTicketForm requester={requester} />}
         {view === 'tickets' && <MyTickets requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
         {view === 'detail' && <TicketDetailView requester={requester} ticketNumber={selectedTicketNumber} />}

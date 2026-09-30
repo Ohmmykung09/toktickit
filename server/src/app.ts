@@ -24,6 +24,7 @@ import { staffRouter } from './staff-router.js';
 import { communicationRouter } from './communication-router.js';
 import { adminRouter } from './admin-router.js';
 import { actionsTakenRouter } from './actions-taken-router.js';
+import { dashboardRouter } from './dashboard-router.js';
 
 export const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api', staffRouter);
 app.use('/api', communicationRouter);
 app.use('/api', adminRouter);
 app.use('/api', actionsTakenRouter);
+app.use('/api', dashboardRouter);
 
 app.get('/api/categories', async (_request, response, next) => {
   try {
@@ -307,7 +309,8 @@ app.get('/api/tickets/:ticketNumber', requesterOnly, async (request, response, n
         publicComments: {
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } }
-        }
+        },
+        actionsTaken: { orderBy: [{ actionDateTime: 'asc' }, { id: 'asc' }], select: { id: true, actionDateTime: true, status: true, description: true, result: true, assignee: { select: { id: true, name: true, role: true } }, createdBy: { select: { id: true, name: true, role: true } }, performedBy: { select: { id: true, name: true, role: true } }, followUpRequired: true, followUpNote: true, attachmentNotes: true, version: true, completedAt: true, cancelledAt: true } }
       }
     });
     if (!ticket) {
@@ -327,7 +330,8 @@ app.get('/api/tickets/:ticketNumber', requesterOnly, async (request, response, n
       category: ticket.category,
       relatedSystem: ticket.relatedSystem,
       attachments: ticket.attachments.map(attachmentInfo),
-      publicComments: ticket.publicComments
+      publicComments: ticket.publicComments,
+      actionsTaken: ticket.actionsTaken
     });
   } catch (error) {
     next(error);
