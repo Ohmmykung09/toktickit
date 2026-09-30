@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
+import { label } from './display';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 const actionStatuses = ['OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'COMPLETED', 'CANCELLED'] as const;
+const actionTransitions: Record<typeof actionStatuses[number], typeof actionStatuses[number][]> = {
+  OPEN: ['IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'COMPLETED', 'CANCELLED'],
+  IN_PROGRESS: ['WAITING_FOR_REQUESTER', 'COMPLETED', 'CANCELLED'],
+  WAITING_FOR_REQUESTER: ['IN_PROGRESS', 'COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: []
+};
 
 type Actor = { id: number; name: string; role: string };
 export type ActionTaken = {
@@ -35,12 +43,10 @@ type Draft = {
 
 type Props = { ticketNumber: string; editable: boolean; assignees?: Actor[]; initialActions?: ActionTaken[] };
 
-function label(value: string) {
-  return value.toLowerCase().split('_').map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(' ');
-}
-
 function inputDate(value: string) {
-  return value ? new Date(value).toISOString().slice(0, 16) : '';
+  if (!value) return '';
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 function initialDraft(): Draft {
@@ -62,15 +68,16 @@ async function responseMessage(response: Response, fallback: string) {
 
 export function ActionsTakenPanel({ ticketNumber, editable, assignees = [], initialActions }: Props) {
   const { authenticatedFetch } = useAuth();
-  const [actions, setActions] = useState<ActionTaken[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>(initialActions ? 'ready' : 'loading');
+  const [actions, setActions] = useState<ActionTaken[]>(() => initialActions ?? []);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('ready');
   const [message, setMessage] = useState('');
   const [draft, setDraft] = useState<Draft>(initialDraft);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [requestKey, setRequestKey] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<boolean> => {
     setState('loading');
     try {
       const response = await authenticatedFetch(`${apiBaseUrl}/api/tickets/${encodeURIComponent(ticketNumber)}/actions-taken`);
@@ -78,16 +85,17 @@ export function ActionsTakenPanel({ ticketNumber, editable, assignees = [], init
       setActions(await response.json() as ActionTaken[]);
       setState('ready');
       setMessage('');
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load Actions Taken.');
       setState('error');
+      return false;
     }
   }, [authenticatedFetch, ticketNumber]);
 
   useEffect(() => {
-    if (initialActions) { setActions(initialActions); setState('ready'); return; }
-    void load();
-  }, [initialActions, load]);
+    if (initialActions !== undefined) { setActions(initialActions); setState('ready'); }
+  }, [initialActions]);
 
   function updateDraft<K extends keyof Draft>(target: 'create' | 'edit', key: K, value: Draft[K]) {
     if (target === 'create') setDraft((current) => ({ ...current, [key]: value }));
@@ -109,15 +117,17 @@ export function ActionsTakenPanel({ ticketNumber, editable, assignees = [], init
     if (validation) { setMessage(validation); return; }
     setBusy(true); setMessage('');
     try {
+      const key = requestKey || globalThis.crypto.randomUUID();
+      setRequestKey(key);
       const response = await authenticatedFetch(`${apiBaseUrl}/api/staff/tickets/${encodeURIComponent(ticketNumber)}/actions-taken`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': globalThis.crypto.randomUUID() },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
         body: JSON.stringify({ ...draft, actionDateTime: new Date(draft.actionDateTime).toISOString(), assigneeId: draft.assigneeId ? Number(draft.assigneeId) : null })
       });
       if (!response.ok) { setMessage(await responseMessage(response, 'Unable to create Action Taken.')); return; }
       setDraft(initialDraft());
-      await load();
-      setMessage('Action Taken created.');
+      setRequestKey('');
+      if (await load()) setMessage('Action Taken created.');
     } catch { setMessage('Unable to reach TokTickIT. Try again.'); }
     finally { setBusy(false); }
   }
@@ -143,8 +153,15 @@ export function ActionsTakenPanel({ ticketNumber, editable, assignees = [], init
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...editDraft, expectedVersion: action.version, actionDateTime: new Date(editDraft.actionDateTime).toISOString(), assigneeId: editDraft.assigneeId ? Number(editDraft.assigneeId) : null })
       });
-      if (!response.ok) { setMessage(await responseMessage(response, 'Unable to update Action Taken.')); return; }
-      setEditingId(null); setEditDraft(null); await load(); setMessage('Action Taken updated.');
+      if (!response.ok) {
+        const failureMessage = await responseMessage(response, 'Unable to update Action Taken.');
+        if (response.status === 409) {
+          if (await load()) setMessage(`${failureMessage} The latest Action Taken was loaded. Review it before saving again.`);
+        } else setMessage(failureMessage);
+        return;
+      }
+      setEditingId(null); setEditDraft(null);
+      if (await load()) setMessage('Action Taken updated.');
     } catch { setMessage('Unable to reach TokTickIT. Try again.'); }
     finally { setBusy(false); }
   }
@@ -156,9 +173,9 @@ export function ActionsTakenPanel({ ticketNumber, editable, assignees = [], init
       <label>Result<textarea aria-label={`${target} action result`} onChange={(event) => updateDraft(target, 'result', event.target.value)} required rows={3} value={current.result} /></label>
       <label>Performed By<input aria-label={`${target} performed by`} readOnly value={target === 'create' ? 'Signed-in staff user' : (editingId ? actorName(actions.find((item) => item.id === editingId)?.performedBy ?? null) : '')} /></label>
       <label>Assignee<select aria-label={`${target} action assignee`} onChange={(event) => updateDraft(target, 'assigneeId', event.target.value)} value={current.assigneeId}><option value="">Unassigned</option>{assignees.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-      {target === 'edit' && <label>Status<select aria-label="Edit action status" onChange={(event) => updateDraft(target, 'status', event.target.value as Draft['status'])} value={current.status}>{actionStatuses.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>}
+      {target === 'edit' && <label>Status<select aria-label="Edit action status" onChange={(event) => { const nextStatus = event.target.value as Draft['status']; if (['COMPLETED', 'CANCELLED'].includes(nextStatus) && !globalThis.confirm(`Confirm status change to ${label(nextStatus)}?`)) return; updateDraft(target, 'status', nextStatus); }} value={current.status}>{[current.status, ...actionTransitions[current.status]].filter((status, index, statuses) => statuses.indexOf(status) === index).map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>}
       <label className="action-checkbox"><input checked={current.followUpRequired} onChange={(event) => updateDraft(target, 'followUpRequired', event.target.checked)} type="checkbox" /> Follow-Up Required</label>
-      <label>Follow-up Note<textarea aria-label={`${target} follow-up note`} onChange={(event) => updateDraft(target, 'followUpNote', event.target.value)} required={current.followUpRequired} rows={2} value={current.followUpNote} /></label>
+      {current.followUpRequired && <label>Follow-up Note<textarea aria-label={`${target} follow-up note`} onChange={(event) => updateDraft(target, 'followUpNote', event.target.value)} required rows={2} value={current.followUpNote} /></label>}
       <label>Attachment Notes<textarea aria-label={`${target} attachment notes`} onChange={(event) => updateDraft(target, 'attachmentNotes', event.target.value)} rows={2} value={current.attachmentNotes} /></label>
     </>;
   }

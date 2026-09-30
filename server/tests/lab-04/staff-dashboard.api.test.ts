@@ -6,13 +6,14 @@ import { authenticatedRequest } from '../authenticated-request.js';
 
 const prefix = 'TKT-STAFF-DASH-';
 async function context() {
-  const [staff, requester, category, relatedSystem] = await Promise.all([
+  const [staff, administrator, requester, category, relatedSystem] = await Promise.all([
     prisma.user.findFirstOrThrow({ where: { role: 'IT_STAFF', isActive: true } }),
+    prisma.user.findFirstOrThrow({ where: { role: 'ADMINISTRATOR', isActive: true } }),
     prisma.user.findFirstOrThrow({ where: { role: 'REQUESTER', isActive: true } }),
     prisma.category.findFirstOrThrow({ where: { isActive: true } }),
     prisma.relatedSystem.findFirstOrThrow({ where: { isActive: true } })
   ]);
-  return { staff, requester, category, relatedSystem };
+  return { staff, administrator, requester, category, relatedSystem };
 }
 async function createTicket(data: Record<string, unknown> = {}) {
   const { requester, category, relatedSystem } = await context();
@@ -57,5 +58,18 @@ describe('Lab 4 IT Staff Dashboard API', () => {
     const response = await api.get('/api/dashboard/staff');
     expect(response.status).toBe(403);
     expect(response.body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('allows Administrator access to the staff dashboard', async () => {
+    const { administrator } = await context();
+    const api = await authenticatedRequest(app, administrator.id);
+    const response = await api.get('/api/dashboard/staff');
+    expect(response.status).toBe(200);
+    expect(response.body.metrics).toMatchObject({
+      unassignedTickets: expect.any(Number),
+      myTickets: expect.any(Number),
+      myActionsTaken: expect.any(Number),
+      operationalTickets: expect.any(Number)
+    });
   });
 });

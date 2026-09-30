@@ -155,9 +155,11 @@ function requestedPriority(value: unknown) {
     : null;
 }
 
-function ticketStatus(value: unknown) {
+function ticketStatuses(value: unknown) {
   if (value === undefined) return undefined;
-  return String(value).toUpperCase() === 'NEW' ? TicketStatus.NEW : null;
+  const values = String(value).toUpperCase().split(',');
+  if (!values.length || values.some((item) => !Object.values(TicketStatus).includes(item as TicketStatus))) return null;
+  return [...new Set(values)] as TicketStatus[];
 }
 
 function displayStatus(status: TicketStatus) {
@@ -240,8 +242,10 @@ app.get('/api/tickets', requesterOnly, async (request, response, next) => {
     const page = pageValue(request.query.page, 1, Number.MAX_SAFE_INTEGER);
     const pageSize = pageValue(request.query.pageSize, 10, 50, 5);
     const categoryId = request.query.categoryId === undefined ? undefined : Number(request.query.categoryId);
-    const status = ticketStatus(request.query.status);
+    const status = ticketStatuses(request.query.status);
     const priority = requestedPriority(request.query.priority);
+    const updatedSince = request.query.updatedSince === undefined ? undefined : String(request.query.updatedSince);
+    const resolvedSince = request.query.resolvedSince === undefined ? undefined : String(request.query.resolvedSince);
     const sort = request.query.sort ?? 'updatedAt';
     const direction = request.query.direction ?? 'desc';
 
@@ -251,6 +255,9 @@ app.get('/api/tickets', requesterOnly, async (request, response, next) => {
       (categoryId !== undefined && (!Number.isInteger(categoryId) || categoryId <= 0)) ||
       status === null ||
       priority === null ||
+      (updatedSince !== undefined && updatedSince !== '7d') ||
+      (resolvedSince !== undefined && resolvedSince !== '7d') ||
+      (updatedSince !== undefined && resolvedSince !== undefined) ||
       !['updatedAt', 'createdAt', 'ticketNumber'].includes(String(sort)) ||
       !['asc', 'desc'].includes(String(direction))
     ) {
@@ -262,8 +269,10 @@ app.get('/api/tickets', requesterOnly, async (request, response, next) => {
     const where: Prisma.TicketWhereInput = {
       requesterId,
       ...(categoryId ? { categoryId } : {}),
-      ...(status ? { status } : {}),
+      ...(status ? { status: { in: status } } : {}),
       ...(priority ? { requestedPriority: priority } : {}),
+      ...(updatedSince === '7d' ? { updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), lte: new Date() } } : {}),
+      ...(resolvedSince === '7d' ? { status: { in: [TicketStatus.RESOLVED, TicketStatus.CLOSED] }, resolvedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), lte: new Date() } } : {}),
       ...(q ? { OR: [{ ticketNumber: { contains: q, mode: 'insensitive' } }, { summary: { contains: q, mode: 'insensitive' } }] } : {})
     };
     const orderBy = { [String(sort)]: String(direction) } as Prisma.TicketOrderByWithRelationInput;
