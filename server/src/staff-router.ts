@@ -32,7 +32,8 @@ const staffTicketSelect = {
   relatedSystem: { select: { id: true, name: true } },
   attachments: { orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }], select: { id: true, originalFileName: true, mimeType: true, sizeBytes: true, createdAt: true, removedAt: true, removalReason: true } },
   publicComments: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } },
-  internalNotes: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } }
+  internalNotes: { orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }], select: { id: true, content: true, createdAt: true, author: { select: { id: true, name: true, role: true } } } },
+  actionsTaken: { orderBy: [{ actionDateTime: 'asc' as const }, { id: 'asc' as const }], select: { id: true, actionDateTime: true, status: true, description: true, result: true, assignee: { select: { id: true, name: true, role: true } }, createdBy: { select: { id: true, name: true, role: true } }, performedBy: { select: { id: true, name: true, role: true } }, followUpRequired: true, followUpNote: true, attachmentNotes: true, version: true, completedAt: true, cancelledAt: true } }
 } satisfies Prisma.TicketSelect;
 
 function fail(response: Parameters<Parameters<typeof staffRouter.get>[1]>[1], status: number, code: string, message: string) {
@@ -58,16 +59,26 @@ function enumValue<T extends string>(value: unknown, values: readonly T[]) {
   return item !== null && values.includes(item as T) ? item as T : null;
 }
 
+function enumValues<T extends string>(value: unknown, values: readonly T[]) {
+  const item = singleQuery(value);
+  if (item === undefined) return undefined;
+  if (item === null) return null;
+  const parsed = item.split(',');
+  if (!parsed.length || parsed.some((entry) => !values.includes(entry as T))) return null;
+  return [...new Set(parsed)] as T[];
+}
+
 staffRouter.get('/staff/tickets', staffOnly, async (request, response, next) => {
   try {
     const searchValue = singleQuery(request.query.search);
     const search = typeof searchValue === 'string' ? searchValue.trim() : searchValue;
     const categoryId = positiveInteger(request.query.categoryId);
     const relatedSystemId = positiveInteger(request.query.relatedSystemId);
-    const status = enumValue(request.query.status, Object.values(TicketStatus));
-    const requestedPriority = enumValue(request.query.requestedPriority, Object.values(RequestedPriority));
-    const itPriority = enumValue(request.query.itPriority, Object.values(RequestedPriority));
+    const status = enumValues(request.query.status, Object.values(TicketStatus));
+    const requestedPriority = enumValues(request.query.requestedPriority, Object.values(RequestedPriority));
+    const itPriority = enumValues(request.query.itPriority, Object.values(RequestedPriority));
     const owner = singleQuery(request.query.owner);
+    const actionSince = singleQuery(request.query.actionSince);
     const sortByValue = enumValue(request.query.sortBy, sortFields);
     const sortOrderValue = enumValue(request.query.sortOrder, ['asc', 'desc'] as const);
     const pageValue = positiveInteger(request.query.page);
@@ -82,6 +93,7 @@ staffRouter.get('/staff/tickets', staffOnly, async (request, response, next) => 
       search === null || (typeof search === 'string' && (!search || search.length > 100)) ||
       categoryId === null || relatedSystemId === null || status === null ||
       requestedPriority === null || itPriority === null || owner === null || ownerId === null ||
+      (actionSince !== undefined && actionSince !== '7d') ||
       sortBy === null || sortOrder === null || page === null || pageSize === null ||
       !pageSizes.includes(pageSize as typeof pageSizes[number])
     ) {
@@ -103,12 +115,13 @@ staffRouter.get('/staff/tickets', staffOnly, async (request, response, next) => 
     const where: Prisma.TicketWhereInput = {
       ...(categoryId ? { categoryId } : {}),
       ...(relatedSystemId ? { relatedSystemId } : {}),
-      ...(status ? { status } : {}),
-      ...(requestedPriority ? { requestedPriority } : {}),
-      ...(itPriority ? { itPriority } : {}),
+      ...(status ? { status: { in: status } } : {}),
+      ...(requestedPriority ? { requestedPriority: { in: requestedPriority } } : {}),
+      ...(itPriority ? { itPriority: { in: itPriority } } : {}),
       ...(owner === 'unassigned' ? { ownerId: null } : {}),
       ...(owner === 'me' ? { ownerId: request.auth!.user.id } : {}),
       ...(ownerId ? { ownerId } : {}),
+      ...(actionSince === '7d' ? { actionsTaken: { some: { performedById: request.auth!.user.id, actionDateTime: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), lte: new Date() } } } } : {}),
       ...(search ? {
         OR: [
           { ticketNumber: { contains: search, mode: 'insensitive' } },

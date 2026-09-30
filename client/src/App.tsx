@@ -3,13 +3,15 @@ import { useAuth } from './AuthGate';
 import { messageCharacterCount, messageDraftError } from './message-policy';
 import { StaffWorkspace } from './StaffWorkspace';
 import { AdminWorkspace } from './AdminWorkspace';
+import { ActionsTakenPanel } from './ActionsTakenPanel';
+import { RequesterDashboard, type RequesterDashboardFilter } from './Dashboard';
 
 type Requester = { id: number; name: string };
 type Lookup = { id: number; name: string };
 type Category = Lookup;
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 type HealthStatus = 'idle' | 'loading' | 'online' | 'offline';
-type View = 'tickets' | 'create' | 'detail';
+type View = 'dashboard' | 'tickets' | 'create' | 'detail';
 
 type TicketForm = {
   categoryId: string;
@@ -46,6 +48,7 @@ type TicketDetail = TicketListItem & {
   attachments: Attachment[];
   requesterResolutionIndicatedAt: string | null;
   publicComments: PublicComment[];
+  actionsTaken?: import('./ActionsTakenPanel').ActionTaken[];
 };
 
 type PublicComment = {
@@ -314,7 +317,7 @@ function CreateTicketForm({ requester }: { requester: Requester }) {
   );
 }
 
-function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTicket: (ticketNumber: string) => void }) {
+function MyTickets({ requester, onOpenTicket, initialFilter = {} }: { requester: Requester; onOpenTicket: (ticketNumber: string) => void; initialFilter?: RequesterDashboardFilter }) {
   const { authenticatedFetch } = useAuth();
   const [tickets, setTickets] = useState<TicketListResponse | null>(null);
   const [categories, setCategories] = useState<Lookup[]>([]);
@@ -322,8 +325,10 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
   const [query, setQuery] = useState({
     q: '',
     categoryId: '',
-    status: '',
+    status: initialFilter.status ?? '',
     priority: '',
+    updatedSince: initialFilter.updatedSince ?? '',
+    resolvedSince: initialFilter.resolvedSince ?? '',
     sort: 'updatedAt',
     direction: 'desc',
     page: 1
@@ -343,6 +348,8 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
         if (query.categoryId) params.set('categoryId', query.categoryId);
         if (query.status) params.set('status', query.status);
         if (query.priority) params.set('priority', query.priority);
+        if (query.updatedSince) params.set('updatedSince', query.updatedSince);
+        if (query.resolvedSince) params.set('resolvedSince', query.resolvedSince);
         const [categoryResponse, response] = await Promise.all([
           authenticatedFetch(`${apiBaseUrl}/api/categories`),
           authenticatedFetch(`${apiBaseUrl}/api/tickets?${params}`)
@@ -368,7 +375,7 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
     setQuery((current) => ({ ...current, ...change, page: change.page ?? 1 }));
   }
 
-  const hasFilters = Boolean(query.q || query.categoryId || query.status || query.priority);
+  const hasFilters = Boolean(query.q || query.categoryId || query.status || query.priority || query.updatedSince || query.resolvedSince);
 
   return (
     <section className="ticket-list-panel">
@@ -379,7 +386,7 @@ function MyTickets({ requester, onOpenTicket }: { requester: Requester; onOpenTi
       <div className="row g-2 mb-4">
         <div className="col-md-4"><label className="visually-hidden" htmlFor="ticket-search">Search tickets</label><input className="form-control" id="ticket-search" onChange={(event) => changeQuery({ q: event.target.value })} placeholder="Search ticket number or summary" value={query.q} /></div>
         <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-category">Category</label><select className="form-select" id="ticket-category" onChange={(event) => changeQuery({ categoryId: event.target.value })} value={query.categoryId}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
-        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-status">Status</label><select className="form-select" id="ticket-status" onChange={(event) => changeQuery({ status: event.target.value })} value={query.status}><option value="">All statuses</option><option value="New">New</option></select></div>
+        <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-status">Status</label><select className="form-select" id="ticket-status" onChange={(event) => changeQuery({ status: event.target.value })} value={query.status}><option value="">All statuses</option><option value="NEW">New</option><option value="OPEN">Open</option><option value="IN_PROGRESS">In Progress</option><option value="WAITING_FOR_REQUESTER">Waiting for Requester</option><option value="RESOLVED">Resolved</option><option value="CLOSED">Closed</option><option value="REOPENED">Reopened</option><option value="CANCELLED">Cancelled</option></select></div>
         <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-priority">Priority</label><select className="form-select" id="ticket-priority" onChange={(event) => changeQuery({ priority: event.target.value })} value={query.priority}><option value="">All priorities</option><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option><option value="Critical">Critical</option></select></div>
         <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-sort">Sort tickets</label><select className="form-select" id="ticket-sort" onChange={(event) => changeQuery({ sort: event.target.value })} value={query.sort}><option value="updatedAt">Last updated</option><option value="createdAt">Created date</option><option value="ticketNumber">Ticket number</option></select></div>
         <div className="col-sm-6 col-md-2"><label className="visually-hidden" htmlFor="ticket-direction">Sort direction</label><select className="form-select" id="ticket-direction" onChange={(event) => changeQuery({ direction: event.target.value })} value={query.direction}><option value="desc">Descending</option><option value="asc">Ascending</option></select></div>
@@ -504,6 +511,7 @@ function TicketDetailView({ requester, ticketNumber }: { requester: Requester; t
         ? <p className="alert alert-success mb-0">Problem Appears Resolved recorded {new Date(ticket.requesterResolutionIndicatedAt).toLocaleString()}.</p>
         : <><p className="small text-secondary">Use this when the problem appears resolved. IT Staff still controls the formal ticket status.</p><button className="btn btn-outline-success" disabled={resolving} onClick={() => void indicateResolved()} type="button">{resolving ? 'Recording...' : 'Problem Appears Resolved'}</button></>}
     </section>
+    <ActionsTakenPanel initialActions={ticket.actionsTaken} ticketNumber={ticket.ticketNumber} editable={false} />
     <AttachmentSection initialAttachments={ticket.attachments} ticketNumber={ticket.ticketNumber} />
     <section className="public-comments border-top mt-4 pt-3" aria-label="Public Comments">
       <h2 className="h5">Public Comments</h2>
@@ -646,6 +654,7 @@ export function App() {
   const [selectedTicketNumber, setSelectedTicketNumber] = useState('');
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle');
   const [categories, setCategories] = useState<Category[]>([]);
+  const [ticketFilter, setTicketFilter] = useState<RequesterDashboardFilter>({});
   const requester = { id: user.id, name: user.name };
 
   async function checkSystem() {
@@ -677,7 +686,8 @@ export function App() {
         <div className="container flex-wrap gap-2">
           <span className="navbar-brand fw-bold text-success">TokTickIT</span>
           <div className="d-flex flex-wrap gap-1 align-items-center">
-            <button aria-label="Open My Tickets" className={`btn btn-sm ${view === 'tickets' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('tickets')} type="button">My Tickets</button>
+            <button aria-label="Open Dashboard" className={`btn btn-sm ${view === 'dashboard' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('dashboard')} type="button">Dashboard</button>
+            <button aria-label="Open My Tickets" className={`btn btn-sm ${view === 'tickets' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => { setTicketFilter({}); setView('tickets'); }} type="button">My Tickets</button>
             <button aria-label="Open Create Ticket" className={`btn btn-sm ${view === 'create' ? 'btn-success' : 'btn-link text-success'}`} onClick={() => setView('create')} type="button">Create Ticket</button>
             <button className="btn btn-primary btn-sm" disabled={healthStatus === 'loading'} onClick={checkSystem} type="button">Check System</button>
           </div>
@@ -687,8 +697,9 @@ export function App() {
         {healthStatus === 'loading' && <p role="status">Loading system status...</p>}
         {healthStatus === 'online' && <div className="alert alert-success" role="status"><strong>System Status:</strong> Online<p className="mb-0">TokTickIT API is online.</p>{categories.length > 0 && <><h2 className="h6 mt-3">Supported Request Categories</h2><ol className="mb-0">{categories.map((category) => <li key={category.id}>{category.name}</li>)}</ol></>}</div>}
         {healthStatus === 'offline' && <div className="alert alert-danger" role="alert"><strong>System Status:</strong> Offline<p className="mb-0">Unable to connect to TokTickIT API.</p></div>}
+        {view === 'dashboard' && <RequesterDashboard onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} onOpenTickets={(filter) => { setTicketFilter(filter); setView('tickets'); }} />}
         {view === 'create' && <CreateTicketForm requester={requester} />}
-        {view === 'tickets' && <MyTickets requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
+        {view === 'tickets' && <MyTickets initialFilter={ticketFilter} requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
         {view === 'detail' && <TicketDetailView requester={requester} ticketNumber={selectedTicketNumber} />}
       </section>
     </main>

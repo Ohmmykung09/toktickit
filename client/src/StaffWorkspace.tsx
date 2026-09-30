@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from './AuthGate';
 import { messageCharacterCount, messageDraftError } from './message-policy';
+import { ActionsTakenPanel } from './ActionsTakenPanel';
+import { StaffDashboard, type StaffDashboardFilter } from './Dashboard';
+import { label } from './display';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
@@ -32,11 +35,8 @@ type TicketDetail = QueueItem & {
   attachments: Array<{ id: number; originalFileName: string; mimeType: string; sizeBytes: number; createdAt: string; removedAt: string | null; removalReason: string | null }>;
   publicComments: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
   internalNotes: Array<{ id: number; content: string; createdAt: string; author: Owner }>;
+  actionsTaken?: import('./ActionsTakenPanel').ActionTaken[];
 };
-
-function label(value: string) {
-  return value.toLowerCase().split('_').map((part) => `${part[0].toUpperCase()}${part.slice(1)}`).join(' ');
-}
 
 function queueErrorMessage(status: number) {
   if (status === 403) return 'You do not have permission to view the IT Staff Ticket Queue.';
@@ -188,6 +188,7 @@ function StaffTicketDetail({ ticketNumber, onBack }: { ticketNumber: string; onB
         <label>Status<select aria-label="Set ticket status" disabled={busy || allowed[ticket.status].length === 0} onChange={(event) => { const next = event.target.value; if (['RESOLVED', 'CLOSED', 'CANCELLED', 'REOPENED'].includes(next) && !globalThis.confirm(`Confirm status change to ${label(next)}?`)) return; void update('status', { status: next }); }} value=""><option value="">Choose transition</option>{allowed[ticket.status].map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></label>
       </aside>
     </div>
+    <ActionsTakenPanel assignees={assignees} editable initialActions={ticket.actionsTaken} ticketNumber={ticket.ticketNumber} />
     <section className="staff-attachments"><h2>Attachments</h2>{ticket.attachments.length ? <ul>{ticket.attachments.map((attachment) => <li key={attachment.id}><div><strong>{attachment.originalFileName}</strong><span>{Math.ceil(attachment.sizeBytes / 1024)} KB · {attachment.mimeType}</span></div>{attachment.removedAt ? <p>Removed: {attachment.removalReason ?? 'No reason recorded.'}</p> : <button className="btn btn-sm btn-outline-success" onClick={() => void downloadAttachment(attachment)} type="button">Download</button>}</li>)}</ul> : <p>No attachments.</p>}</section>
     <div className="staff-history">
       <section className="public-history" aria-label="Public Comments"><h2>Public Comments</h2><p className="history-caption">Shared with the Requester and authorized staff.</p>{ticket.publicComments.length ? ticket.publicComments.map((item) => <article key={item.id}><div><strong>{item.author.name}</strong><span>{label(item.author.role)} · {new Date(item.createdAt).toLocaleString()}</span></div><p>{item.content}</p></article>) : <p>No Public Comments yet.</p>}<form onSubmit={(event) => void postMessage('public', event)}><label htmlFor="staff-public-comment">Add Public Comment</label><textarea id="staff-public-comment" onChange={(event) => setPublicContent(event.target.value)} rows={4} value={publicContent} /><footer><span>{messageCharacterCount(publicContent)} / 2,000</span><button className="btn btn-success btn-sm" disabled={posting !== null} type="submit">{posting === 'public' ? 'Posting...' : 'Post Public Comment'}</button></footer></form></section>
@@ -203,13 +204,14 @@ export function StaffWorkspace() {
   const [message, setMessage] = useState('');
   const [page, setPage] = useState(1);
   const [selectedTicketNumber, setSelectedTicketNumber] = useState('');
-  const [query, setQuery] = useState({ search: '', categoryId: '', relatedSystemId: '', status: '', requestedPriority: '', itPriority: '', owner: '', sortBy: 'updatedAt', sortOrder: 'desc', pageSize: '20' });
+  const [workspaceView, setWorkspaceView] = useState<'dashboard' | 'queue'>('queue');
+  const [query, setQuery] = useState({ search: '', categoryId: '', relatedSystemId: '', status: '', requestedPriority: '', itPriority: '', owner: '', actionSince: '', sortBy: 'updatedAt', sortOrder: 'desc', pageSize: '20' });
 
-  const load = useCallback(async (requestedPage = page) => {
+  const load = useCallback(async (requestedPage = page, requestedQuery = query) => {
     setState('loading');
     setMessage('');
-    const parameters = new URLSearchParams({ page: String(requestedPage), pageSize: query.pageSize, sortBy: query.sortBy, sortOrder: query.sortOrder });
-    Object.entries(query).forEach(([key, value]) => {
+    const parameters = new URLSearchParams({ page: String(requestedPage), pageSize: requestedQuery.pageSize, sortBy: requestedQuery.sortBy, sortOrder: requestedQuery.sortOrder });
+    Object.entries(requestedQuery).forEach(([key, value]) => {
       if (value && !['pageSize', 'sortBy', 'sortOrder'].includes(key)) parameters.set(key, value);
     });
     try {
@@ -230,15 +232,22 @@ export function StaffWorkspace() {
 
   useEffect(() => { void load(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hasFilters = useMemo(() => Boolean(query.search || query.categoryId || query.relatedSystemId || query.status || query.requestedPriority || query.itPriority || query.owner), [query]);
+  const hasFilters = useMemo(() => Boolean(query.search || query.categoryId || query.relatedSystemId || query.status || query.requestedPriority || query.itPriority || query.owner || query.actionSince), [query]);
   function submit(event: FormEvent) { event.preventDefault(); void load(1); }
   function update(key: keyof typeof query, value: string) { setQuery((current) => ({ ...current, [key]: value })); }
+  function openQueue(filter: StaffDashboardFilter) {
+    setSelectedTicketNumber('');
+    const nextQuery = { ...query, search: '', categoryId: '', relatedSystemId: '', status: '', requestedPriority: '', itPriority: '', owner: '', actionSince: '', ...filter };
+    setQuery(nextQuery);
+    setWorkspaceView('queue');
+    void load(1, nextQuery);
+  }
 
   return (
     <main className="staff-page min-vh-100">
-      <nav className="staff-nav"><strong>TokTickIT</strong><span>IT Staff Ticket Queue</span></nav>
+      <nav className="staff-nav"><strong>TokTickIT</strong><span>IT Staff Workspace</span><div className="staff-nav-actions"><button className={workspaceView === 'dashboard' ? 'active' : ''} onClick={() => { setSelectedTicketNumber(''); setWorkspaceView('dashboard'); }} type="button">Dashboard</button><button className={workspaceView === 'queue' ? 'active' : ''} onClick={() => { setSelectedTicketNumber(''); setWorkspaceView('queue'); }} type="button">Ticket Queue</button></div></nav>
       <section className="staff-layout">
-        {selectedTicketNumber ? <StaffTicketDetail ticketNumber={selectedTicketNumber} onBack={() => setSelectedTicketNumber('')} /> : <>
+        {workspaceView === 'dashboard' ? <StaffDashboard onOpenQueue={openQueue} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setWorkspaceView('queue'); }} /> : selectedTicketNumber ? <StaffTicketDetail ticketNumber={selectedTicketNumber} onBack={() => setSelectedTicketNumber('')} /> : <>
         <header className="staff-header"><div><h1>Ticket Queue</h1><p>Search, prioritize, and open service requests.</p></div>{result && <strong>{result.pagination.totalItems} tickets</strong>}</header>
         <form className="queue-controls" onSubmit={submit}>
           <label className="queue-search">Search<input aria-label="Search tickets" onChange={(event) => update('search', event.target.value)} placeholder="Ticket, summary, requester" value={query.search} /></label>
