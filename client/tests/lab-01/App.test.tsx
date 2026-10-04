@@ -1,25 +1,26 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
+import { renderAuthenticated } from '../authenticated-render';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const requesterResponse = () => new Response(JSON.stringify([{ id: 1, name: 'Aom S.' }]), { status: 200 });
-
 describe('TokTickIT foundation UI', () => {
   it('renders the TokTickIT heading', () => {
-    render(<App />);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+    renderAuthenticated(<App />);
 
     expect(
-      screen.getByRole('heading', { name: /toktickit it service desk/i })
+      screen.getByRole('heading', { name: /my tickets/i })
     ).toBeInTheDocument();
   });
 
   it('shows a Bootstrap primary button', () => {
-    render(<App />);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}));
+    renderAuthenticated(<App />);
 
     expect(screen.getByRole('button', { name: /check system/i })).toHaveClass(
       'btn',
@@ -29,7 +30,8 @@ describe('TokTickIT foundation UI', () => {
 
   it('displays the backend status after a successful health check', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -61,7 +63,7 @@ describe('TokTickIT foundation UI', () => {
         )
       );
 
-    render(<App />);
+    renderAuthenticated(<App />);
 
     await userEvent.click(screen.getByRole('button', { name: /check system/i }));
 
@@ -84,7 +86,8 @@ describe('TokTickIT foundation UI', () => {
 
   it('displays a useful error message when the category request fails', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -108,7 +111,7 @@ describe('TokTickIT foundation UI', () => {
         })
       );
 
-    render(<App />);
+    renderAuthenticated(<App />);
 
     await userEvent.click(screen.getByRole('button', { name: /check system/i }));
 
@@ -128,7 +131,8 @@ describe('TokTickIT foundation UI', () => {
 
   it('shows a loading state while the system check is in progress', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }), { status: 200 }))
       .mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -145,7 +149,7 @@ describe('TokTickIT foundation UI', () => {
         })
     );
 
-    render(<App />);
+    renderAuthenticated(<App />);
 
     await userEvent.click(screen.getByRole('button', { name: /check system/i }));
 
@@ -156,10 +160,11 @@ describe('TokTickIT foundation UI', () => {
 
   it('displays a useful error message when the backend is unavailable', async () => {
     vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(requesterResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }), { status: 200 }))
       .mockRejectedValueOnce(new Error('Backend unavailable'));
 
-    render(<App />);
+    renderAuthenticated(<App />);
 
     await userEvent.click(screen.getByRole('button', { name: /check system/i }));
 
