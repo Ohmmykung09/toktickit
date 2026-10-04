@@ -14,7 +14,8 @@ const migrationFiles = [
   new URL('../../prisma/migrations/20260822000000_lab2_ticket_foundation/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260901000000_lab2_review_fixes/migration.sql', import.meta.url),
   new URL('../../prisma/migrations/20260911000000_lab3_user_migration/migration.sql', import.meta.url),
-  new URL('../../prisma/migrations/20260911100000_bind_session_version/migration.sql', import.meta.url)
+  new URL('../../prisma/migrations/20260911100000_bind_session_version/migration.sql', import.meta.url),
+  new URL('../../prisma/migrations/20260912000000_lab3_review_hardening/migration.sql', import.meta.url)
 ];
 
 let app: Express;
@@ -106,13 +107,13 @@ describe('Lab 3 authentication API', () => {
     expect(currentUser.body.user.email).toBe('aom@example.test');
   });
 
-  it('uses the same safe response for wrong, inactive, unknown, locked, and unprovisioned accounts', async () => {
+  it('uses constant-cost safe failures and gives a distinct response only for a correct inactive login', async () => {
     await database.user.create({
       data: { name: 'Pending User', email: 'pending@example.test', role: 'REQUESTER', isActive: true }
     });
     const attempts = [
       ['beam@example.test', 'WrongPassword!2026'],
-      ['inactive@example.test', initialPassword],
+      ['inactive@example.test', 'WrongPassword!2026'],
       ['unknown@example.test', initialPassword],
       ['pending@example.test', initialPassword]
     ];
@@ -123,6 +124,9 @@ describe('Lab 3 authentication API', () => {
       bodies.push(response.body);
     }
     expect(bodies.every((body) => JSON.stringify(body) === JSON.stringify(bodies[0]))).toBe(true);
+    const inactiveResponse = await signIn(request.agent(app), 'inactive@example.test', initialPassword);
+    expect(inactiveResponse.status).toBe(403);
+    expect(inactiveResponse.body.error.code).toBe('ACCOUNT_INACTIVE');
 
     expect((await signIn(request.agent(app), 'beam@example.test')).status).toBe(200);
     const resetUser = await database.user.findUniqueOrThrow({ where: { email: 'beam@example.test' } });
@@ -136,10 +140,9 @@ describe('Lab 3 authentication API', () => {
     expect(concurrentFailures.map((response) => response.status)).toEqual([401, 401, 401, 401, 401]);
     const lockedUser = await database.user.findUniqueOrThrow({ where: { email: 'mew@example.test' } });
     expect(lockedUser.failedLoginAttempts).toBe(5);
-    expect(lockedUser.lockedUntil).toBeInstanceOf(Date);
-    const lockedResponse = await signIn(request.agent(app), 'mew@example.test');
-    expect(lockedResponse.status).toBe(401);
-    expect(lockedResponse.body).toEqual(bodies[0]);
+    expect(lockedUser.lockedUntil).toBeNull();
+    const recoveredResponse = await signIn(request.agent(app), 'mew@example.test');
+    expect(recoveredResponse.status).toBe(200);
   });
 
   it('blocks normal APIs until the initial password is changed and replaces all prior sessions', async () => {

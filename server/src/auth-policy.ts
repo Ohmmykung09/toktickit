@@ -57,10 +57,7 @@ export function nextFailedLoginState(
   return {
     failedLoginAttempts,
     failedLoginWindowStartedAt: insideWindow ? windowStartedAt : now,
-    lockedUntil:
-      failedLoginAttempts >= maximumFailedLoginAttempts
-        ? new Date(now.getTime() + accountLockMilliseconds)
-        : null
+    lockedUntil: null
   };
 }
 

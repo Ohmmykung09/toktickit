@@ -23,7 +23,7 @@ Status, Requested Priority, IT Priority, role, active/inactive state, and remove
 - Password visibility control uses a familiar icon and accessible name.
 - Primary Sign In button has stable dimensions and shows a busy label/state without layout shift.
 - Client validation covers required fields and email shape; server failures use an account-neutral message.
-- Inactive, unknown, locked, and wrong-password outcomes do not reveal account existence.
+- Unknown, unprovisioned, and wrong-password outcomes do not reveal account existence. A correctly authenticated inactive account receives a clear inactive-account response.
 - API-unavailable feedback is distinct from invalid credentials and supports Retry by resubmission.
 
 ## 4. Mandatory Change Password

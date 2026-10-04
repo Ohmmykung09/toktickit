@@ -92,7 +92,7 @@ adminRouter.get('/admin/users', administratorOnly, async (request, response, nex
     const searchValue = single(request.query.search);
     const roleValue = single(request.query.role);
     const search = typeof searchValue === 'string' ? searchValue.trim() : searchValue;
-    if (search === null || (search !== undefined && (!search || search.length > 100)) || roleValue === null || (roleValue !== undefined && !validRole(roleValue))) {
+    if (search === null || (search !== undefined && search.length > 100) || roleValue === null || (roleValue !== undefined && !validRole(roleValue))) {
       error(response, 400, 'INVALID_QUERY', 'User list parameters are invalid.');
       return;
     }
@@ -210,18 +210,16 @@ adminRouter.patch('/admin/users/:userId', administratorOnly, async (request, res
 
       const roleChanged = nextRole !== target.role;
       const deactivated = target.isActive && !nextIsActive;
-      const profileChanged =
-        (typeof data.name === 'string' && data.name !== target.name) ||
-        (typeof data.email === 'string' && data.email !== target.email);
       const losesStaffEligibility =
         (target.role === UserRole.IT_STAFF || target.role === UserRole.ADMINISTRATOR) &&
         (!nextIsActive || nextRole === UserRole.REQUESTER);
-      const invalidatesSessions = deactivated || roleChanged || profileChanged;
+      const emailChanged = typeof data.email === 'string' && data.email !== target.email;
+      const invalidatesSessions = deactivated || roleChanged || emailChanged;
       const changedAt = new Date();
 
       if (losesStaffEligibility) {
         await transaction.ticket.updateMany({
-          where: { ownerId: userId },
+          where: { ownerId: userId, status: { notIn: ['RESOLVED', 'CLOSED', 'CANCELLED'] } },
           data: { ownerId: null, updatedAt: changedAt }
         });
       }

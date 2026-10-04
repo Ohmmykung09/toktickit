@@ -66,7 +66,7 @@ TokTickIT must identify each user from a secure authenticated session instead of
 | BR-02 | Email identity is trimmed and stored in lowercase. Its maximum length is 254 characters and it is unique case-insensitively. |
 | BR-03 | Passwords are never stored or logged in plaintext. They are hashed with Argon2id using 19,456 KiB memory, two iterations, and parallelism one. |
 | BR-04 | A valid password contains 12 to 128 characters and at least three of uppercase, lowercase, digit, and symbol character classes. It must not equal the normalized email address. |
-| BR-05 | Five failed login attempts within 15 minutes temporarily block further attempts for 15 minutes. A successful login resets the counters; the response remains generic. |
+| BR-05 | Failed login attempts use bounded progressive backoff per account without globally locking the account. A successful login resets the counters; the response remains generic for unknown, unprovisioned, and wrong-password accounts. |
 | BR-06 | A user marked `mustChangePassword` cannot access normal application APIs or screens. Only current-user, change-password, and logout operations are permitted. |
 | BR-07 | A changed password must differ from the current password. Changing or administratively resetting a password revokes all existing sessions for that user. |
 | BR-08 | Session tokens are random, stored only as hashes in PostgreSQL, bound to the user's current session version, delivered through an `HttpOnly` cookie, and expire after eight hours. Logout revokes the server session and clears the cookie. |

@@ -1,4 +1,4 @@
-import { Prisma, UserRole } from '@prisma/client';
+import { Prisma, TicketStatus, UserRole } from '@prisma/client';
 import { Router } from 'express';
 import { requireRole } from './auth-router.js';
 import { prisma } from './db.js';
@@ -73,9 +73,12 @@ async function appendMessage(
         ticketNumber,
         ...(actor.role === UserRole.REQUESTER ? { requesterId: actor.id } : {})
       },
-      select: { id: true }
+      select: { id: true, status: true }
     });
     if (!ticket) return { outcome: 'not-found' } as const;
+    if (kind === 'public' && (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.CANCELLED)) {
+      return { outcome: 'inactive-ticket' } as const;
+    }
 
     const data = { ticketId: ticket.id, authorId: actor.id, content };
     const message = kind === 'public'
@@ -93,7 +96,7 @@ async function recordResolutionIndication(ticketNumber: string, actorId: number)
       return { outcome: 'forbidden' } as const;
     }
     const ticket = await transaction.ticket.findFirst({
-      where: { ticketNumber, requesterId: actor.id },
+      where: { ticketNumber, requesterId: actor.id, status: { notIn: [TicketStatus.CLOSED, TicketStatus.CANCELLED] } },
       select: { id: true }
     });
     if (!ticket) return { outcome: 'not-found' } as const;
@@ -123,6 +126,10 @@ function sendWriteResult(
   }
   if (result.outcome === 'not-found') {
     fail(response, 404, 'RESOURCE_NOT_FOUND', 'Ticket not found.');
+    return;
+  }
+  if (result.outcome === 'inactive-ticket') {
+    fail(response, 409, 'TICKET_NOT_ACTIVE', 'This Ticket is not accepting Public Comments.');
     return;
   }
   response.status(201).json(result.message);

@@ -153,11 +153,14 @@ function requestedPriority(value: unknown) {
 
 function ticketStatus(value: unknown) {
   if (value === undefined) return undefined;
-  return String(value).toUpperCase() === 'NEW' ? TicketStatus.NEW : null;
+  const normalized = String(value).toUpperCase();
+  return Object.values(TicketStatus).includes(normalized as TicketStatus)
+    ? normalized as TicketStatus
+    : null;
 }
 
 function displayStatus(status: TicketStatus) {
-  return status === TicketStatus.NEW ? 'New' : status;
+  return status.toLowerCase().split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 }
 
 function displayPriority(priority: RequestedPriority) {

@@ -19,7 +19,7 @@ async function context() {
   return { owner: requesters[0], otherRequester: requesters[1], staff, administrator, category, relatedSystem };
 }
 
-async function createTicket(requesterId: number) {
+async function createTicket(requesterId: number, status: 'OPEN' | 'CLOSED' | 'CANCELLED' = 'OPEN') {
   const { category, relatedSystem } = await context();
   const suffix = randomUUID().slice(0, 8);
   return prisma.ticket.create({
@@ -33,7 +33,7 @@ async function createTicket(requesterId: number) {
       description: 'This ticket verifies Public Comments, Internal Notes, and resolution indication.',
       requestedPriority: 'MEDIUM',
       itPriority: 'MEDIUM',
-      status: 'OPEN'
+      status
     }
   });
 }
@@ -250,5 +250,18 @@ describe('Lab 3 Public Comments, Internal Notes, and resolution indication', () 
     expect(forbiddenStaff.status).toBe(403);
     expect(stored.requesterResolutionIndicatedById).toBe(owner.id);
     expect(stored.status).toBe(ticket.status);
+  });
+
+  it('rejects resolution indications and Public Comments on terminal tickets', async () => {
+    const { owner } = await context();
+    const ticket = await createTicket(owner.id, 'CLOSED');
+    const ownerApi = await authenticatedRequest(app, owner.id);
+
+    const resolution = await ownerApi.post(`/api/tickets/${ticket.ticketNumber}/problem-appears-resolved`);
+    const comment = await ownerApi.post(`/api/tickets/${ticket.ticketNumber}/public-comments`).send({ content: 'A comment after closure.' });
+
+    expect(resolution.status).toBe(404);
+    expect(comment.status).toBe(409);
+    expect(comment.body.error.code).toBe('TICKET_NOT_ACTIVE');
   });
 });

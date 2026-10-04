@@ -9,6 +9,7 @@ import {
   logout,
   resolveSession,
   sessionCookieName,
+  touchSession,
   type ResolvedSession
 } from './auth-service.js';
 
@@ -99,6 +100,7 @@ authRouter.get('/me', async (request, response, next) => {
   try {
     const session = await resolveSession(cookieValue(request));
     if (!session) throw new AuthError(401, 'UNAUTHENTICATED', 'Authentication is required.');
+    await touchSession(session);
     response.status(200).json({
       user: session.user,
       mustChangePassword: session.mustChangePassword,
@@ -120,6 +122,7 @@ authRouter.post('/change-password', async (request, response, next) => {
     if (!approvedOrigin(request) || !csrfMatches(session, request.header('X-CSRF-Token'))) {
       throw new AuthError(403, 'CSRF_REJECTED', 'The request could not be verified.');
     }
+    await touchSession(session);
     sendSession(
       response,
       await changePassword(session, request.body?.currentPassword, request.body?.newPassword)
@@ -140,6 +143,7 @@ authRouter.post('/logout', async (request, response, next) => {
       if (!approvedOrigin(request) || !csrfMatches(session, request.header('X-CSRF-Token'))) {
         throw new AuthError(403, 'CSRF_REJECTED', 'The request could not be verified.');
       }
+      await touchSession(session);
       await logout(session);
     }
     response.clearCookie(sessionCookieName, clearCookieOptions).status(204).send();
@@ -218,15 +222,15 @@ export function requireMutationCsrf(
   response: express.Response,
   next: express.NextFunction
 ) {
-  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
+  void (async () => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+      (!request.auth || !approvedOrigin(request) || !csrfMatches(request.auth, request.header('X-CSRF-Token')))) {
+      response.status(403).json({
+        error: { code: 'CSRF_REJECTED', message: 'The request could not be verified.' }
+      });
+      return;
+    }
+    if (request.auth) await touchSession(request.auth);
     next();
-    return;
-  }
-  if (!request.auth || !approvedOrigin(request) || !csrfMatches(request.auth, request.header('X-CSRF-Token'))) {
-    response.status(403).json({
-      error: { code: 'CSRF_REJECTED', message: 'The request could not be verified.' }
-    });
-    return;
-  }
-  next();
+  })().catch(next);
 }

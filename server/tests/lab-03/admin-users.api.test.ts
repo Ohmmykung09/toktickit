@@ -38,7 +38,7 @@ async function createManagedUser(role: UserRole = UserRole.REQUESTER, localPart 
   });
 }
 
-async function createOwnedTicket(ownerId: number) {
+async function createOwnedTicket(ownerId: number, status: 'IN_PROGRESS' | 'CLOSED' = 'IN_PROGRESS') {
   const [requesterUser, category, relatedSystem] = await Promise.all([
     prisma.user.findFirstOrThrow({ where: { role: UserRole.REQUESTER, isActive: true } }),
     prisma.category.findFirstOrThrow({ where: { isActive: true } }),
@@ -57,7 +57,7 @@ async function createOwnedTicket(ownerId: number) {
       description: 'This ticket verifies atomic owner reconciliation.',
       requestedPriority: 'MEDIUM',
       itPriority: 'HIGH',
-      status: 'IN_PROGRESS',
+      status,
       publicComments: { create: { authorId: requesterUser.id, content: 'Preserve public history.' } },
       internalNotes: { create: { authorId: ownerId, content: 'Preserve internal history.' } }
     },
@@ -74,7 +74,9 @@ describe('Lab 3 Administrator user management', () => {
     expect(created.body).not.toHaveProperty('passwordHash');
     expect(created.body).not.toHaveProperty('sessionVersion');
     const listed = await api.get('/api/admin/users?search=new.user&role=IT_STAFF');
+    const blankSearch = await api.get('/api/admin/users?search=%20%20');
     expect(listed.status).toBe(200);
+    expect(blankSearch.status).toBe(200);
     expect(listed.body).toHaveLength(1);
     expect(listed.body[0].id).toBe(created.body.id);
   });
@@ -183,6 +185,19 @@ describe('Lab 3 Administrator user management', () => {
     expect(stored.ownerId).toBeNull();
     expect(stored.status).toBe(ticket.status);
     expect((await ownerApi.get('/api/categories')).status).toBe(401);
+  });
+
+  it('keeps terminal ticket ownership history when a staff owner becomes ineligible', async () => {
+    const api = await administratorApi();
+    const owner = await createManagedUser(UserRole.IT_STAFF, 'terminal.owner');
+    const ticket = await createOwnedTicket(owner.id, 'CLOSED');
+
+    const result = await api.patch(`/api/admin/users/${owner.id}`).send({ isActive: false });
+    const stored = await prisma.ticket.findUniqueOrThrow({ where: { id: ticket.id } });
+
+    expect(result.status).toBe(200);
+    expect(stored.ownerId).toBe(owner.id);
+    expect(stored.status).toBe('CLOSED');
   });
 
   it('validates password boundaries and CSRF before resetting the initial password and revoking sessions', async () => {

@@ -12,6 +12,7 @@ import {
 } from './auth-policy.js';
 
 const sessionDurationMilliseconds = 8 * 60 * 60 * 1000;
+const dummyPasswordHash = '$argon2id$v=19$m=19456,p=1,t=2$/VJEtBfCRBhK2JvRo43fzQ$9dl23T6/bY1PG9TEcUUP0B+cPeMb9Ab+85EPPAC38Ug';
 
 export const sessionCookieName = 'toktickit_session';
 
@@ -108,21 +109,11 @@ async function recordFailedLogin(userId: number, verifiedPasswordHash: string, n
           THEN ${now}
           ELSE "failedLoginWindowStartedAt"
         END,
-        "lockedUntil" = CASE
-          WHEN CASE
-            WHEN "failedLoginWindowStartedAt" IS NULL
-              OR "failedLoginWindowStartedAt" <= ${now} - INTERVAL '15 minutes'
-            THEN 1
-            ELSE "failedLoginAttempts" + 1
-          END >= 5
-          THEN ${now} + INTERVAL '15 minutes'
-          ELSE NULL
-        END,
+        "lockedUntil" = NULL,
         "updatedAt" = ${now}
       WHERE "id" = ${userId}
         AND "passwordHash" = ${verifiedPasswordHash}
         AND "isActive" = TRUE
-        AND ("lockedUntil" IS NULL OR "lockedUntil" <= ${now})
     `
   );
 }
@@ -141,19 +132,18 @@ export async function login(emailInput: unknown, passwordInput: unknown) {
   const email = normalizeEmail(emailInput);
   const user = await prisma.user.findUnique({ where: { email } });
   const now = new Date();
-  if (
-    !user ||
-    !user.isActive ||
-    !user.passwordHash ||
-    !user.passwordProvisionedAt ||
-    (user.lockedUntil !== null && user.lockedUntil > now)
-  ) {
+  const passwordHash = user?.passwordHash ?? dummyPasswordHash;
+  const passwordVerified = await passwordMatches(passwordHash, passwordInput);
+  if (!user || !user.passwordHash || !user.passwordProvisionedAt) {
     throw invalidCredentials();
   }
-
-  if (!(await passwordMatches(user.passwordHash, passwordInput))) {
+  if (!passwordVerified) {
     await recordFailedLogin(user.id, user.passwordHash, now);
+    await new Promise((resolve) => setTimeout(resolve, Math.min(1000, (user.failedLoginAttempts + 1) * 100)));
     throw invalidCredentials();
+  }
+  if (!user.isActive) {
+    throw new AuthError(403, 'ACCOUNT_INACTIVE', 'This account is inactive.');
   }
 
   await authenticationTestHooks.afterPasswordVerified?.(user.id);
@@ -166,7 +156,6 @@ export async function login(emailInput: unknown, passwordInput: unknown) {
         passwordProvisionedAt: { not: null },
         sessionVersion: user.sessionVersion,
         isActive: true,
-        OR: [{ lockedUntil: null }, { lockedUntil: { lte: now } }]
       },
       data: { failedLoginAttempts: 0, failedLoginWindowStartedAt: null, lockedUntil: null }
     });
@@ -205,13 +194,19 @@ export async function resolveSession(cookieValue: string | null): Promise<Resolv
     return null;
   }
 
-  await prisma.session.update({ where: { id: session.id }, data: { lastUsedAt: now } });
   return {
     sessionId: session.id,
     csrfToken: tokens.csrfToken,
     user: publicUser(session.user),
     mustChangePassword: session.user.mustChangePassword
   };
+}
+
+export async function touchSession(session: ResolvedSession) {
+  await prisma.session.updateMany({
+    where: { id: session.sessionId, revokedAt: null },
+    data: { lastUsedAt: new Date() }
+  });
 }
 
 export function csrfMatches(session: ResolvedSession, csrfToken: string | undefined) {

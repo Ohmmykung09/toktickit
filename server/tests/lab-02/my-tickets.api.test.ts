@@ -7,7 +7,7 @@ import { authenticatedRequest } from '../authenticated-request.js';
 async function createTestTicket(
   requesterId: number,
   summary: string,
-  options: { categoryId?: number; priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' } = {}
+  options: { categoryId?: number; priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'; status?: 'NEW' | 'OPEN' | 'IN_PROGRESS' | 'WAITING_FOR_REQUESTER' | 'RESOLVED' | 'CLOSED' | 'REOPENED' | 'CANCELLED' } = {}
 ) {
   const [category, relatedSystem] = await Promise.all([
     options.categoryId
@@ -26,7 +26,8 @@ async function createTestTicket(
       summary,
       description: 'A complete description used to verify requester ticket ownership.',
       requestedPriority: options.priority ?? 'MEDIUM',
-      itPriority: options.priority ?? 'MEDIUM'
+      itPriority: options.priority ?? 'MEDIUM',
+      status: options.status ?? 'NEW'
     }
   });
 }
@@ -108,6 +109,18 @@ describe('Lab 2 My Tickets APIs', () => {
     expect(beyondLastPage.body.pagination).toEqual({ page: 3, pageSize: 5, totalItems: 6, totalPages: 2 });
     expect(noResults.body.items).toEqual([]);
     expect(noResults.body.pagination.totalItems).toBe(0);
+  });
+
+  it('filters every Ticket status and returns human-readable status labels', async () => {
+    const requester = await prisma.user.findFirstOrThrow({ where: { isActive: true, role: 'REQUESTER' } });
+    const marker = `Status filter ${Date.now()}`;
+    const ticket = await createTestTicket(requester.id, marker, { status: 'IN_PROGRESS' });
+    const api = await authenticatedRequest(app, requester.id);
+
+    const response = await api.get(`/api/tickets?q=${encodeURIComponent(marker)}&status=IN_PROGRESS`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toEqual([expect.objectContaining({ ticketNumber: ticket.ticketNumber, status: 'In Progress' })]);
   });
 
   it('rejects invalid list parameters safely', async () => {

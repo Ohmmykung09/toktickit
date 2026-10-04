@@ -11,7 +11,7 @@ No test may depend on test execution order or mutate shared seed records without
 | Test ID | Type | Requirement / AC | What it tests | Expected result | Planned file | Final status |
 | --- | --- | --- | --- | --- | --- | --- |
 | UNIT-01 | Unit | BR-02, BR-04 | Email normalization and password policy boundaries | Valid inputs normalize; invalid values are rejected | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
-| UNIT-02 | Unit | BR-05 | Login-attempt window and temporary lock calculations | Fifth failure locks; expiry and success reset safely | `server/tests/lab-03/auth-policy.unit.test.ts` | Passed on Issue #28 branch |
+| UNIT-02 | Unit | BR-05 | Login-attempt window and bounded backoff calculations | Failed-attempt counters reset safely without globally locking the account | `server/tests/lab-03/auth-policy.unit.test.ts` | Updated in cumulative review fixes |
 | UNIT-03 | Unit | AC-10 | Ticket status transition matrix and owner requirements | Only documented transitions are permitted | `server/tests/lab-03/status-policy.unit.test.ts` | Passed on Issue #34 integrated branch |
 | UNIT-04 | Unit | BR-20 | Comment/note trimming, Unicode code-point counting, malformed-surrogate rejection, and length limits | Empty/malformed/oversized content fails; valid content is preserved through 2,000 code points | `server/tests/lab-03/message-policy.unit.test.ts`, `client/tests/lab-03/MessagePolicy.test.ts` | Passed on Issue #32 review-fix branch |
 | API-01 | API | AC-01 | Valid, invalid, inactive, unknown, blocked, and concurrent failed login | Safe response; five parallel failures are counted and lock the account | `server/tests/lab-03/auth.api.test.ts` | Passed on Issue #28 branch |
