@@ -1,6 +1,6 @@
 # TokTickIT
 
-TokTickIT is a full-stack IT service desk application for CPE 334. Lab 3 adds authenticated Requester, IT Staff, and Administrator accounts while preserving the completed Lab 2 ticket and attachment workflows.
+TokTickIT is a full-stack IT service desk application for CPE 334. Lab 4 completes the authenticated Requester, IT Staff, and Administrator workflows with Actions Taken, guarded Ticket resolution, and role-scoped dashboards while preserving earlier ticket and attachment behavior.
 
 Authentication uses an expiring server-side session in an `HttpOnly` cookie. Seeded local users must replace their explicitly configured initial password before entering the application. Requester identity now comes only from the authenticated session; the temporary Lab 2 requester selector and requester identity header have been removed.
 
@@ -25,6 +25,7 @@ toktickit/
 |- server/                       Express API and Prisma schema
 |- docs/lab-02/                  Lab 2 engineering and delivery records
 |- docs/lab-03/                  Lab 3 contract, tests, review, and AI-use records
+|- docs/lab-04/                  Lab 4 contract, tests, review, and AI-use records
 |- e2e/                          Browser workflow specifications
 `- artifacts/                    Final screenshot evidence locations
 ```
@@ -72,7 +73,7 @@ npm run prisma:seed
 npm run db:check
 ```
 
-The seed preserves the Lab 2 Requesters as authenticated Users and creates four active Requesters, one inactive Requester, three active IT Staff, one inactive IT Staff, one active Administrator, and realistic tickets covering all eight Lab 3 statuses. It retains the four categories and seven related systems and adds safe Public Comment and Internal Note fixtures. Repeat runs create missing fixtures and provision only null credential states; they do not overwrite user-managed records.
+The seed preserves the Lab 2 Requesters as authenticated Users and creates the local demonstration accounts, realistic Tickets covering all eight lifecycle statuses, and Actions Taken covering active and terminal states. It retains categories, related systems, Public Comments, Internal Notes, and attachment examples. Repeat runs create missing fixtures and provision only null credential states; they do not overwrite user-managed records.
 
 ## Run Locally
 
@@ -102,7 +103,7 @@ Build both projects:
 npm run build
 ```
 
-Install Chromium once for the Lab 3 browser tests:
+Install Chromium once for browser tests:
 
 ```powershell
 npx playwright install chromium
@@ -114,10 +115,35 @@ Run the complete Lab 3 quality gate:
 npm run test:quality:lab3
 ```
 
+Run the complete Lab 4 regression and quality gate. This runs all client suites, server suites in an isolated PostgreSQL schema, the production build, and authenticated browser flows for Labs 2 to 4:
+
+```powershell
+npm run test:quality:lab4
+```
+
+Run only the Lab 4 browser flows:
+
+```powershell
+npm run test:e2e:lab4
+```
+
+The Lab 4 browser flows create and update Actions Taken, exercise the resolution gate and reopen cycle, and verify Requester and Staff dashboard drill-downs. They run against the real API, session/CSRF checks, and PostgreSQL. Responsive screenshots are written to `artifacts/lab-04/screenshots/` at 1440 x 1000, 820 x 1180, and 390 x 844. The flows also run axe WCAG A/AA checks, page-level horizontal-overflow checks, and browser-error assertions.
+
 The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves evidence at the authoritative desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844 viewports under `artifacts/lab-03/screenshots/`.
 
-The full traceability table and final evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md). The completed responsive checklist is in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md). Peer-review findings and outcomes are recorded in [docs/lab-03/reviewer.md](docs/lab-03/reviewer.md), and selected prompts with the student's reflection are recorded in [docs/lab-03/ai-use.md](docs/lab-03/ai-use.md).
+The full traceability tables and evidence instructions are in [docs/lab-03/tests.md](docs/lab-03/tests.md) and [docs/lab-04/tests.md](docs/lab-04/tests.md). The UI contracts are in [docs/lab-03/ui-spec.md](docs/lab-03/ui-spec.md) and [docs/lab-04/ui-spec.md](docs/lab-04/ui-spec.md). Peer-review findings and AI-use reflections are recorded in the corresponding `docs/lab-03/` and `docs/lab-04/` files.
 
-## Lab 3 Release Flow
+## Lab 4 Demonstration
 
-Lab 3 feature branches enter `lab3-staging` only through reviewed Pull Requests. After the release-evidence Issue is approved and merged, create one release Pull Request from `lab3-staging` to `main`. Rerun `npm run test:quality:lab3` from the final `main` branch and capture the passing output, final commit graph, Project board, rendered documentation, and required UI states for the submission PDF.
+1. Sign in as an IT Staff user and open **Dashboard** to review unassigned, owned, and urgent Tickets.
+2. Open an active Ticket, add an Action Taken with an assignee and result, and move it through its allowed lifecycle.
+3. Try resolving before a qualifying Action Taken is completed; the workflow should explain why it is blocked.
+4. Complete an Action Taken and resolve the Ticket. Close and reopen it to see the resolution cycle reset while preserving the Action history.
+5. Sign in as the owning Requester and open **Dashboard**. Review the waiting and recent Ticket lists, then open the Ticket and confirm Actions Taken is read-only and Internal Notes remain hidden.
+6. Sign in as an Administrator to review the shared Staff Dashboard and **User Management** navigation; a Requester must not access either protected area directly.
+
+Use the unique initial password configured through `LAB3_SEED_INITIAL_PASSWORD` in `server/.env`; the repository does not contain a default login password.
+
+## Lab 4 Release Flow
+
+Lab 4 feature branches enter `lab4-staging` only through reviewed Pull Requests. After Issue #54 regression and evidence are complete, create one release Pull Request from `lab4-staging` to `main`. Run `npm run test:quality:lab4` from the integrated branch and capture passing output, screenshots, and required documentation for the submission.

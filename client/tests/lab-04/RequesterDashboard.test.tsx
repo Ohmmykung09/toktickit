@@ -18,4 +18,30 @@ describe('Lab 4 Requester Dashboard UI', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open ticket' }));
     expect(await screen.findByRole('heading', { name: 'Wi-Fi issue' })).toBeInTheDocument();
   });
+
+  it('shows an empty state and zero metrics when no dashboard data exists', async () => {
+    const emptyDashboard = { metrics: { openTickets: 0, waitingForRequester: 0, recentlyUpdatedCount: 0, recentlyResolvedCount: 0 }, attentionTickets: [], recentTickets: [] };
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }))
+      .mockResolvedValueOnce(json(emptyDashboard));
+    renderAuthenticated(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Dashboard' }));
+    expect(await screen.findByText('No Tickets are currently waiting for your response.')).toBeInTheDocument();
+    expect(screen.getByText('No Tickets were updated in the last 7 days.')).toBeInTheDocument();
+    expect(screen.getAllByText('0')).toHaveLength(4);
+  });
+
+  it('offers retry after a dashboard request fails', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json({ items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } }))
+      .mockResolvedValueOnce(json({ error: { message: 'Dashboard is temporarily unavailable.' } }, 503))
+      .mockResolvedValueOnce(json(dashboard));
+    renderAuthenticated(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Dashboard' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dashboard is temporarily unavailable.');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Wi-Fi issue')).toBeInTheDocument();
+  });
 });

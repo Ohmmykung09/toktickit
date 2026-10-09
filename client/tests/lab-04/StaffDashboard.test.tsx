@@ -19,4 +19,27 @@ describe('Lab 4 IT Staff Dashboard UI', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open ticket' }));
     expect(await screen.findByRole('heading', { name: 'Core switch unavailable' })).toBeInTheDocument();
   });
+
+  it('shows zero metrics and a useful empty state', async () => {
+    const emptyDashboard = { metrics: { unassignedTickets: 0, myTickets: 0, myActionsTaken: 0, operationalTickets: 0, byStatus: { NEW: 0, OPEN: 0, IN_PROGRESS: 0, WAITING_FOR_REQUESTER: 0, REOPENED: 0 }, byItPriority: { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 } }, urgentTickets: [] };
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json(queue))
+      .mockResolvedValueOnce(json(emptyDashboard));
+    renderAuthenticated(<App />, { user: { id: 6, name: 'Ploy IT', email: 'ploy.it@example.test', role: 'IT_STAFF' }, mustChangePassword: false, csrfToken: 'csrf' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Dashboard' }));
+    expect(await screen.findByText('No urgent or recently updated Tickets were found.')).toBeInTheDocument();
+    expect(screen.getAllByText('0').length).toBeGreaterThan(4);
+  });
+
+  it('offers retry after a dashboard request fails', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json(queue))
+      .mockResolvedValueOnce(json({ error: { message: 'Staff metrics are temporarily unavailable.' } }, 503))
+      .mockResolvedValueOnce(json(dashboard));
+    renderAuthenticated(<App />, { user: { id: 6, name: 'Ploy IT', email: 'ploy.it@example.test', role: 'IT_STAFF' }, mustChangePassword: false, csrfToken: 'csrf' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Dashboard' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Staff metrics are temporarily unavailable.');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('Core switch unavailable')).toBeInTheDocument();
+  });
 });

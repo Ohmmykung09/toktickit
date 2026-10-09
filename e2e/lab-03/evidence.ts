@@ -21,7 +21,18 @@ export async function assertAccessible(page: Page) {
   expect(results.violations, results.violations.map((item) => `${item.id}: ${item.help}`).join('\n')).toEqual([]);
 }
 
-export async function captureResponsiveEvidence(page: Page, directory: string, screen: string) {
+export function collectBrowserErrors(page: Page, ignoredConsoleErrors: RegExp[] = []) {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && !ignoredConsoleErrors.some((pattern) => pattern.test(message.text()))) {
+      errors.push(message.text());
+    }
+  });
+  return errors;
+}
+
+export async function captureResponsiveEvidence(page: Page, directory: string, screen: string, lab = 'lab-03') {
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await expect(page.locator('body')).toBeVisible();
@@ -32,8 +43,10 @@ export async function captureResponsiveEvidence(page: Page, directory: string, s
     ).toBe(true);
     await assertAccessible(page);
     await page.screenshot({
-      fullPage: true,
-      path: `artifacts/lab-03/screenshots/${directory}/${screen}-${viewport.name}.png`
+      // Lab 4 evidence must match the documented viewport dimensions exactly.
+      // Keep Lab 3's historical full-page captures unchanged.
+      fullPage: lab !== 'lab-04',
+      path: `artifacts/${lab}/screenshots/${directory}/${screen}-${viewport.name}.png`
     });
   }
 }
