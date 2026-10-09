@@ -25,7 +25,7 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 | UI-04 | UI | AC-09, AC-10, AC-11 | Staff metrics, buckets, urgent ordering, drill-down, safe states | Exact Queue filters and no cross-role data leakage. | `client/tests/lab-04/StaffDashboard.test.tsx`, `e2e/lab-04/dashboards.spec.ts` | Passing |
 | UI-05 | Accessibility / UI style | AC-14, AC-15 | Semantic names, keyboard activation, WCAG A/AA, status/alerts, responsive layout | Axe reports no violations on tested flows; keyboard activation works; no horizontal overflow. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Passing |
 | REG-01 | Regression | AC-13, AC-16 | Lab 1–3 client/server regression after Lab 4 integration | Existing authorization, ownership, ticket number, and timestamp behavior remains green. | `npm run test:quality:lab4` | Passing |
-| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five warmups plus 30 samples per endpoint | Nearest-rank p95 <= 500 ms, bounded response, expected indexes in query plans. Observed p95: 327.7 ms dashboard / 10.6 ms Action list. Run only through the isolated perf script. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
+| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five warmups plus 30 samples per endpoint | Nearest-rank p95 <= 500 ms, bounded response, expected indexes in query plans. Aggregate-gate p95: 93.9 ms dashboard / 7.4 ms Action list. Run only through the isolated perf script. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
 | E2E-01 | E2E | AC-01 to AC-07 | Staff creates, assigns, transitions, completes, cancels, edits, retries after a committed/lost response, and reviews Actions Taken | Idempotent retry leaves one Action; pending submit disables duplicate clicks; cancelled/completed Actions become immutable; resolution requires a qualifying current-cycle Action. | `e2e/lab-04/actions-taken-flow.spec.ts` | Passing |
 | E2E-02 | E2E | AC-06, AC-07 | Ticket transitions, confirmation, reopen cycle, append-only history, conflict behavior | Resolution gate and recovery are observable; history survives reopening. | `e2e/lab-04/ticket-resolution.spec.ts` | Passing |
 | E2E-03 | E2E | AC-08 to AC-11 | Requester and Staff dashboard metrics, drill-down, empty and role boundaries | Correct scoped metrics, bounded lists, exact destinations, safe states. | `e2e/lab-04/dashboards.spec.ts` | Passing |
@@ -60,6 +60,8 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 - Three Lab 4 browser workflows against the real client, server, authentication, CSRF, and database.
 - Accessibility scans and responsive evidence at desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844.
 - Rendered `specification.md`, `api-spec.md`, `ui-spec.md`, and this test plan.
+- [Project board snapshot: all cards #48–#56 Done](../../artifacts/lab-04/screenshots/project-board-lab4.png).
+- [Commit-history graph snapshot](../../artifacts/lab-04/screenshots/commit-history-lab4.png).
 
 ## 5. Final Verification Commands
 
@@ -70,4 +72,4 @@ npm run test:quality:lab4
 git diff --check
 ```
 
-The verified gate passed 59 client tests and 94 isolated server tests (the synthetic 10k/50k performance case is skipped in the ordinary server suite), the separate isolated performance test (1 passed; 30 samples per endpoint), production build, and all Lab 2–4 Playwright flows (10 passed). Lab 4 viewport captures use the exact dimensions listed above and have companion full-page captures.
+`npm run test:quality:lab4` passed from the Issue #55 branch based on reviewed staging commit `ed005a1bde3ea5913bfe47e981b8e4ad508f31d1`: 59 client tests, 94 isolated server tests (the performance case is intentionally skipped in the ordinary server suite), 1 isolated 10k/50k performance test (30 samples per endpoint; p95 93.9 ms dashboard / 7.4 ms Actions list), production client/server builds, and all 10 Lab 2–4 Playwright flows. Lab 4 viewport captures use the exact dimensions listed above and have companion full-page captures. Rerun `npm run test:quality:lab4` after this evidence PR merges and on the exact release candidate; the pre-evidence commit is not final-main evidence.
