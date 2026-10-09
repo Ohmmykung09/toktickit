@@ -11,6 +11,7 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 | API-01 | API | AC-01 to AC-05 | Action Taken list/create/assign/transition/complete/cancel/update, authenticated audit fields, stale writes, idempotency | Valid lifecycle and audit data; stale writes preserve data; retries do not duplicate Actions. | `server/tests/lab-04/actions-taken.api.test.ts` | Passing |
 | API-02 | API / Authorization | AC-03, AC-04 | Requester read-only access, cross-owner protection, role restrictions, inactive assignee rejection, validation | Forbidden or invalid requests return safe status without mutation. | `server/tests/lab-04/actions-taken.api.test.ts` | Passing |
 | API-03 | API | AC-06, AC-07 | Ticket transitions, active owner requirement, atomic resolution gate, reopen cycle, advisory indication | Direct calls cannot bypass policy; reopening starts a new cycle and preserves history. | `server/tests/lab-04/ticket-workflow.api.test.ts` | Passing |
+| AUTH-01 | Authorization | BR-28, AC-03, AC-06, AC-08, AC-09, AC-11 | Action Taken and Ticket workflow mutations with missing Origin or incorrect session CSRF token | Both endpoints return 403 `CSRF_REJECTED`; no Action row or Ticket status change is persisted. | `server/tests/lab-04/actions-taken.api.test.ts` | Passing |
 | API-04 | API | AC-08, AC-10, AC-11 | Requester dashboard counts, seven-day resolvedAt boundary, bounded lists, drill-down, empty and failure states | Authoritative scoped metrics, stable bounded lists, zero/empty states. | `server/tests/lab-04/requester-dashboard.api.test.ts` | Passing |
 | API-05 | API / Authorization | AC-09, AC-10, AC-11 | Staff operational buckets, current-user Actions, urgent window/order, filters, forbidden access | Authoritative metrics and bounded urgent rows; Requesters receive 403. | `server/tests/lab-04/staff-dashboard.api.test.ts` | Passing |
 | MIG-01 | Integration | AC-13, AC-16 | Apply migration to empty schema and seed | Migration succeeds; seeded fixture relations and status/priority coverage are valid. | `server/tests/lab-04/migration-regression.integration.test.ts` | Passing |
@@ -24,8 +25,8 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 | UI-04 | UI | AC-09, AC-10, AC-11 | Staff metrics, buckets, urgent ordering, drill-down, safe states | Exact Queue filters and no cross-role data leakage. | `client/tests/lab-04/StaffDashboard.test.tsx`, `e2e/lab-04/dashboards.spec.ts` | Passing |
 | UI-05 | Accessibility / UI style | AC-14, AC-15 | Semantic names, keyboard activation, WCAG A/AA, status/alerts, responsive layout | Axe reports no violations on tested flows; keyboard activation works; no horizontal overflow. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Passing |
 | REG-01 | Regression | AC-13, AC-16 | Lab 1–3 client/server regression after Lab 4 integration | Existing authorization, ownership, ticket number, and timestamp behavior remains green. | `npm run test:quality:lab4` | Passing |
-| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five samples after warm-up | p95 <= 500 ms, bounded response, expected indexes in query plans. Observed p95: 95.3 ms dashboard / 17.3 ms Action list. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
-| E2E-01 | E2E | AC-01 to AC-07 | Staff creates, assigns, transitions, completes, edits, and reviews Actions Taken | Visible lifecycle matches API; resolution requires a qualifying current-cycle Action. | `e2e/lab-04/actions-taken-flow.spec.ts` | Passing |
+| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five warmups plus 30 samples per endpoint | Nearest-rank p95 <= 500 ms, bounded response, expected indexes in query plans. Observed p95: 327.7 ms dashboard / 10.6 ms Action list. Run only through the isolated perf script. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
+| E2E-01 | E2E | AC-01 to AC-07 | Staff creates, assigns, transitions, completes, cancels, edits, retries after a committed/lost response, and reviews Actions Taken | Idempotent retry leaves one Action; pending submit disables duplicate clicks; cancelled/completed Actions become immutable; resolution requires a qualifying current-cycle Action. | `e2e/lab-04/actions-taken-flow.spec.ts` | Passing |
 | E2E-02 | E2E | AC-06, AC-07 | Ticket transitions, confirmation, reopen cycle, append-only history, conflict behavior | Resolution gate and recovery are observable; history survives reopening. | `e2e/lab-04/ticket-resolution.spec.ts` | Passing |
 | E2E-03 | E2E | AC-08 to AC-11 | Requester and Staff dashboard metrics, drill-down, empty and role boundaries | Correct scoped metrics, bounded lists, exact destinations, safe states. | `e2e/lab-04/dashboards.spec.ts` | Passing |
 | A11Y-01 | Accessibility | AC-14, AC-15 | WCAG A/AA scans, semantic names, keyboard focus/activation, dialogs and status regions | No required Axe violations; keyboard activation verified. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Passing |
@@ -37,15 +38,15 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 | --- | --- |
 | AC-01 | API-01, UI-01, E2E-01 |
 | AC-02 | API-01, UI-01, E2E-01 |
-| AC-03 | API-02, UI-01, E2E-01 |
+| AC-03 | AUTH-01, API-02, UI-01, E2E-01 |
 | AC-04 | API-02, UI-01 |
 | AC-05 | API-01, E2E-02 |
-| AC-06 | API-03, UI-01, UI-02, E2E-01, E2E-02 |
+| AC-06 | AUTH-01, API-03, UI-01, UI-02, E2E-01, E2E-02 |
 | AC-07 | API-03, UI-02, E2E-02 |
-| AC-08 | API-04, UI-03, E2E-03 |
-| AC-09 | API-05, UI-04, PERF-01, E2E-03 |
+| AC-08 | AUTH-01, API-04, UI-03, E2E-03 |
+| AC-09 | AUTH-01, API-05, UI-04, PERF-01, E2E-03 |
 | AC-10 | API-04, API-05, UI-03, UI-04, E2E-03 |
-| AC-11 | API-04, API-05, UI-03, UI-04, E2E-03 |
+| AC-11 | AUTH-01, API-04, API-05, UI-03, UI-04, E2E-03 |
 | AC-12 | API-01, UI-01, E2E-01 |
 | AC-13 | MIG-01, MIG-02, MIG-05, REG-01 |
 | AC-14 | RESP-01, A11Y-01, E2E-01, E2E-02, E2E-03 |
@@ -62,11 +63,11 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 
 ## 5. Final Verification Commands
 
-Run the integrated regression gate with:
+Run the integrated regression and isolated performance gates with:
 
 ```powershell
 npm run test:quality:lab4
 git diff --check
 ```
 
-The verified gate covers client tests (56 passing), isolated server tests (93 passing), production build, and all Lab 2–4 Playwright flows (10 passing). Lab 4 responsive captures use the exact viewport dimensions listed above.
+The verified gate passed 59 client tests and 94 isolated server tests (the synthetic 10k/50k performance case is skipped in the ordinary server suite), the separate isolated performance test (1 passed; 30 samples per endpoint), production build, and all Lab 2–4 Playwright flows (10 passed). Lab 4 viewport captures use the exact dimensions listed above and have companion full-page captures.

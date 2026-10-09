@@ -17,7 +17,7 @@ test('Requester and Staff dashboards show role-scoped metrics and actionable dri
   await expect(requesterMetrics).toContainText('Waiting for Requester');
   await expect(requesterMetrics.locator('article').filter({ hasText: 'Resolved in 7 days' }).locator('strong')).toHaveText('1');
   await expect(page.getByRole('heading', { name: 'Lab 4 E2E requester waiting ticket' }).first()).toBeVisible();
-  await captureResponsiveEvidence(page, 'dashboards', 'requester-dashboard', 'lab-04');
+  await captureResponsiveEvidence(page, 'dashboards', 'requester-dashboard', 'lab-04', '.requester-dashboard');
 
   const resolvedDrilldown = page.getByRole('button', { name: 'View resolved Tickets' });
   await resolvedDrilldown.focus();
@@ -34,7 +34,7 @@ test('Requester and Staff dashboards show role-scoped metrics and actionable dri
   await expect(page.getByRole('heading', { name: 'Actions Taken' })).toBeVisible();
   await expect(page.getByText('Reviewed the requester connection report.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add Action Taken' })).toHaveCount(0);
-  expect(browserErrors).toEqual([]);
+  expect(browserErrors.errors).toEqual([]);
 
   await page.getByRole('button', { name: 'Log out' }).click();
   await signIn(page, e2eUsers.staff.email);
@@ -45,9 +45,9 @@ test('Requester and Staff dashboards show role-scoped metrics and actionable dri
   await expect(staffMetrics).toContainText('Unassigned Tickets');
   await expect(staffMetrics).toContainText('My Actions Taken (7d)');
   await expect(page.getByText('Lab 4 E2E urgent unassigned ticket')).toBeVisible();
-  await captureResponsiveEvidence(page, 'dashboards', 'staff-dashboard', 'lab-04');
+  await captureResponsiveEvidence(page, 'dashboards', 'staff-dashboard', 'lab-04', '.staff-dashboard');
   const urgentTicket = page.locator('.dashboard-ticket-list article').filter({ hasText: 'Lab 4 E2E urgent unassigned ticket' });
   await urgentTicket.getByRole('button', { name: 'Open ticket' }).click();
   await expect(page.getByRole('heading', { name: 'Lab 4 E2E urgent unassigned ticket' })).toBeVisible();
-  expect(staffBrowserErrors).toEqual([]);
+  expect(staffBrowserErrors.errors).toEqual([]);
 });

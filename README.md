@@ -115,7 +115,7 @@ Run the complete Lab 3 quality gate:
 npm run test:quality:lab3
 ```
 
-Run the complete Lab 4 regression and quality gate. This runs all client suites, server suites in an isolated PostgreSQL schema, the production build, and authenticated browser flows for Labs 2 to 4:
+Run the complete Lab 4 regression and quality gate. This runs all client suites, server suites and a separate performance smoke in isolated PostgreSQL schemas, the production build, and authenticated browser flows for Labs 2 to 4:
 
 ```powershell
 npm run test:quality:lab4
@@ -128,6 +128,8 @@ npm run test:e2e:lab4
 ```
 
 The Lab 4 browser flows create and update Actions Taken, exercise the resolution gate and reopen cycle, and verify Requester and Staff dashboard drill-downs. They run against the real API, session/CSRF checks, and PostgreSQL. Responsive screenshots are written to `artifacts/lab-04/screenshots/` at 1440 x 1000, 820 x 1180, and 390 x 844. The flows also run axe WCAG A/AA checks, page-level horizontal-overflow checks, and browser-error assertions.
+
+The synthetic 10,000-Ticket / 50,000-Action performance smoke is excluded from the default `npm run test:server` suite so it cannot affect fixture baseline tests. Run it independently against a disposable PostgreSQL schema with `npm run test:perf:lab4`; the Lab 4 quality gate includes this isolated run.
 
 The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves evidence at the authoritative desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844 viewports under `artifacts/lab-03/screenshots/`.
 

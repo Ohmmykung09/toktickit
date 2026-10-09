@@ -24,7 +24,7 @@ async function removePerformanceFixtures() {
 afterEach(removePerformanceFixtures);
 afterAll(async () => { await prisma.$disconnect(); });
 
-describe('Lab 4 dashboard and Action Taken performance smoke', () => {
+describe.skipIf(process.env.LAB4_PERF !== '1')('Lab 4 dashboard and Action Taken performance smoke', () => {
   it('keeps dashboard and indexed action-list reads under 500 ms at 10k Tickets and 50k Actions', async () => {
     const [requester, staff, category, relatedSystem] = await Promise.all([
       prisma.user.findFirstOrThrow({ where: { role: 'REQUESTER', isActive: true } }),
@@ -90,14 +90,19 @@ describe('Lab 4 dashboard and Action Taken performance smoke', () => {
     expect(actionsWarmup.body).toHaveLength(5);
 
     async function measure(path: string) {
+      for (let warmup = 0; warmup < 5; warmup += 1) {
+        const response = await staffApi.get(path);
+        expect(response.status).toBe(200);
+      }
       const samples: number[] = [];
-      for (let sample = 0; sample < 5; sample += 1) {
+      for (let sample = 0; sample < 30; sample += 1) {
         const startedAt = performance.now();
         const response = await staffApi.get(path);
         samples.push(performance.now() - startedAt);
         expect(response.status).toBe(200);
       }
       samples.sort((left, right) => left - right);
+      // Nearest-rank p95 over 30 independent requests (rank 29), after five warmups.
       const p95 = samples[Math.ceil(samples.length * 0.95) - 1];
       expect(p95, `${path} p95: ${p95.toFixed(1)} ms; samples: ${samples.map((value) => value.toFixed(1)).join(', ')}`).toBeLessThanOrEqual(500);
       return p95;

@@ -16,9 +16,16 @@ async function transition(page: import('playwright/test').Page, status: string) 
 
 test('blocks premature resolution, preserves action history, and requires new work after reopen', async ({ page }) => {
   await signIn(page, e2eUsers.staff.email);
-  const browserErrors = collectBrowserErrors(page, [/409 \(Conflict\)/]);
+  const browserErrors = collectBrowserErrors(page);
+  const apiBaseUrl = process.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+  const resolutionUrl = new URL(`/api/staff/tickets/${resolutionTicketNumber}/status`, apiBaseUrl).toString();
+  let resolutionConflicts = 0;
+  page.on('response', (response) => {
+    if (response.url() === resolutionUrl && response.status() === 409) resolutionConflicts += 1;
+  });
   await openTicket(page);
 
+  browserErrors.expectHttpError(resolutionUrl, 409);
   await transition(page, 'RESOLVED');
   await expect(page.getByRole('status')).toContainText('Complete a qualifying Action Taken for the current resolution cycle before resolving this Ticket.');
   await expect(page.getByText('Open', { exact: true }).first()).toBeVisible();
@@ -38,6 +45,7 @@ test('blocks premature resolution, preserves action history, and requires new wo
   await expect(page.locator('.actions-taken-panel [role="status"]')).toContainText('Action Taken updated.');
   await expect(actionCard.getByText('Completed', { exact: true })).toBeVisible();
 
+  browserErrors.expectHttpError(resolutionUrl, 409);
   await transition(page, 'RESOLVED');
   await expect(page.locator('.staff-detail > header')).toContainText('Resolved');
   await transition(page, 'CLOSED');
@@ -49,6 +57,7 @@ test('blocks premature resolution, preserves action history, and requires new wo
   await transition(page, 'RESOLVED');
   await expect(page.getByRole('status')).toContainText('Complete a qualifying Action Taken for the current resolution cycle before resolving this Ticket.');
   await expect(page.getByText(description)).toBeVisible();
-  await captureResponsiveEvidence(page, 'ticket-resolution', 'reopened-ticket-detail', 'lab-04');
-  expect(browserErrors).toEqual([]);
+  expect(resolutionConflicts).toBe(2);
+  await captureResponsiveEvidence(page, 'ticket-resolution', 'reopened-ticket-detail', 'lab-04', '.staff-detail');
+  expect(browserErrors.errors).toEqual([]);
 });

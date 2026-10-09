@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/App';
@@ -41,5 +41,51 @@ describe('Lab 4 Actions Taken UI', () => {
     const request = fetch.mock.calls[3];
     expect(request[1]).toMatchObject({ method: 'POST' });
     expect(new Headers((request[1] as RequestInit).headers).get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it('disables repeat submission while a create is pending', async () => {
+    let resolveCreate!: (response: Response) => void;
+    const pendingCreate = new Promise<Response>((resolve) => { resolveCreate = resolve; });
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json(queue))
+      .mockResolvedValueOnce(json(ticket))
+      .mockResolvedValueOnce(json([{ id: 6, name: 'Ploy IT', role: 'IT_STAFF' }]))
+      .mockImplementationOnce(() => pendingCreate)
+      .mockResolvedValueOnce(json([action]));
+    renderAuthenticated(<App />, staff);
+    await openDetail();
+    await userEvent.type(screen.getByRole('textbox', { name: 'create action description' }), 'Checked the VPN logs.');
+    await userEvent.type(screen.getByRole('textbox', { name: 'create action result' }), 'The rule is ready for approval.');
+
+    const submit = screen.getByRole('button', { name: 'Add Action Taken' });
+    await userEvent.click(submit);
+    await waitFor(() => expect(submit).toBeDisabled());
+    await userEvent.click(submit);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+
+    resolveCreate(json(action, 201));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Action Taken created.'));
+  });
+
+  it('cancels an Action Taken from the edit UI and hides all further edit controls', async () => {
+    const cancelledAction = { ...action, status: 'CANCELLED', version: 2, cancelledAt: '2026-09-11T12:00:00.000Z' };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json(queue))
+      .mockResolvedValueOnce(json({ ...ticket, actionsTaken: [action] }))
+      .mockResolvedValueOnce(json([{ id: 6, name: 'Ploy IT', role: 'IT_STAFF' }]))
+      .mockResolvedValueOnce(json(cancelledAction))
+      .mockResolvedValueOnce(json([cancelledAction]));
+    renderAuthenticated(<App />, staff);
+    await openDetail();
+    const actionCard = screen.getByText('Reviewed VPN policy.').closest('article')!;
+    await userEvent.click(within(actionCard).getByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Edit action status'), 'CANCELLED');
+    await userEvent.click(screen.getByRole('button', { name: 'Save Action' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Action Taken updated.');
+    expect(await within(actionCard).findByText('Cancelled')).toBeInTheDocument();
+    expect(within(actionCard).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+    expect(fetch.mock.calls[3][1]).toMatchObject({ method: 'PATCH' });
   });
 });

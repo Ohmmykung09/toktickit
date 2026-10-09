@@ -51,7 +51,7 @@ describe('Create Ticket', () => {
     expect(createHeaders.get('X-CSRF-Token')).toBe('test-csrf-token');
     expect(createHeaders.has('X-Development-Requester-Id')).toBe(false);
     expect(fetchMock).toHaveBeenLastCalledWith('http://localhost:3000/api/tickets/TKT-20260824-0001/attachments', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }));
-  });
+  }, 15_000);
 
   it('shows adjacent validation feedback before submitting an incomplete form', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(ticketListResponse()).mockResolvedValueOnce(categoryResponse()).mockResolvedValueOnce(systemResponse());

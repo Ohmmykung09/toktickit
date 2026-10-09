@@ -44,4 +44,30 @@ describe('Lab 4 Requester Dashboard UI', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByText('Wi-Fi issue')).toBeInTheDocument();
   });
+
+  it('clears a dashboard drill-down when My Tickets is opened from navigation', async () => {
+    const emptyTickets = { items: [], pagination: { page: 1, pageSize: 10, totalItems: 0, totalPages: 1 } };
+    const fetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json(emptyTickets))
+      .mockResolvedValueOnce(json({ ...dashboard, metrics: { ...dashboard.metrics, recentlyResolvedCount: 1 } }))
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json(emptyTickets))
+      .mockResolvedValueOnce(json([{ id: 1, name: 'Network' }]))
+      .mockResolvedValueOnce(json(emptyTickets));
+    renderAuthenticated(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Open Dashboard' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'View resolved Tickets' }));
+    await screen.findByRole('heading', { name: 'My Tickets' });
+    await userEvent.click(screen.getByRole('button', { name: 'Open My Tickets' }));
+    expect(await screen.findByText('You have not created any tickets yet.')).toBeInTheDocument();
+
+    const ticketListRequests = fetch.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.includes('/api/tickets?'));
+    expect(ticketListRequests).toHaveLength(3);
+    expect(new URL(ticketListRequests[1]).searchParams.get('resolvedSince')).toBe('7d');
+    expect(new URL(ticketListRequests[2]).searchParams.has('resolvedSince')).toBe(false);
+  });
 });
