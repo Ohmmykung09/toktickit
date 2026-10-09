@@ -11,8 +11,8 @@ dotenv.config({ path: path.join(serverDirectory, '.env') });
 
 const mode = process.argv[2];
 const requestedTests = process.argv.slice(3);
-if (!['server', 'e2e'].includes(mode)) {
-  throw new Error('Use run-lab3-isolated.mjs with either "server" or "e2e".');
+if (!['server', 'e2e', 'perf'].includes(mode)) {
+  throw new Error('Use run-lab3-isolated.mjs with "server", "e2e", or "perf".');
 }
 if (!process.env.DATABASE_URL) {
   throw new Error('Create server/.env with DATABASE_URL before running Lab 3 quality tests.');
@@ -27,6 +27,7 @@ const isolatedEnvironment = {
   DATABASE_URL: isolatedUrl.toString(),
   LAB3_SEED_INITIAL_PASSWORD: 'Lab3Automated!2026',
   LAB3_ISOLATED_E2E: mode === 'e2e' ? '1' : '0',
+  LAB4_PERF: mode === 'perf' ? '1' : '0',
   NODE_ENV: 'test'
 };
 
@@ -58,7 +59,9 @@ try {
 
   const passed = mode === 'server'
     ? runNpm(['--workspace', 'server', 'test', '--', '--run', '--no-file-parallelism'], repositoryRoot)
-    : runNpm(['exec', '--', 'playwright', 'test', ...(requestedTests.length ? requestedTests : ['e2e/lab-03'])], repositoryRoot);
+    : mode === 'perf'
+      ? runNpm(['--workspace', 'server', 'test', '--', '--run', '--no-file-parallelism', ...requestedTests], repositoryRoot)
+      : runNpm(['exec', '--', 'playwright', 'test', ...(requestedTests.length ? requestedTests : ['e2e/lab-03'])], repositoryRoot);
   if (!passed) process.exitCode = 1;
 } finally {
   await admin.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

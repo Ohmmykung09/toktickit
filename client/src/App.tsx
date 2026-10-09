@@ -699,7 +699,7 @@ export function App() {
         {healthStatus === 'offline' && <div className="alert alert-danger" role="alert"><strong>System Status:</strong> Offline<p className="mb-0">Unable to connect to TokTickIT API.</p></div>}
         {view === 'dashboard' && <RequesterDashboard onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} onOpenTickets={(filter) => { setTicketFilter(filter); setView('tickets'); }} />}
         {view === 'create' && <CreateTicketForm requester={requester} />}
-        {view === 'tickets' && <MyTickets initialFilter={ticketFilter} requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
+        {view === 'tickets' && <MyTickets key={JSON.stringify(ticketFilter)} initialFilter={ticketFilter} requester={requester} onOpenTicket={(ticketNumber) => { setSelectedTicketNumber(ticketNumber); setView('detail'); }} />}
         {view === 'detail' && <TicketDetailView requester={requester} ticketNumber={selectedTicketNumber} />}
       </section>
     </main>

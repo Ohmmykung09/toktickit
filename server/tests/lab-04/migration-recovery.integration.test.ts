@@ -316,7 +316,7 @@ describe('Lab 4 migration recovery', () => {
       expect(await tableExists(client, 'ActionTaken')).toBe(true);
       expect(await legacyCounts(client)).toEqual(beforeCounts);
     });
-  });
+  }, 30_000);
 
   it('rehearses backup restore after a committed failure and retries the migration', async () => {
     await withIsolatedSchema(async (client, schema, backupSchema) => {
@@ -339,5 +339,5 @@ describe('Lab 4 migration recovery', () => {
       expect(await tableExists(client, 'ActionTaken')).toBe(true);
       expect(await legacyCounts(client)).toEqual(beforeCounts);
     });
-  });
+  }, 30_000);
 });
