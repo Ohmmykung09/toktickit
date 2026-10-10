@@ -129,6 +129,14 @@ npm run test:e2e:lab4
 
 The Lab 4 browser flows create and update Actions Taken, exercise the resolution gate and reopen cycle, and verify Requester and Staff dashboard drill-downs. They run against the real API, session/CSRF checks, and PostgreSQL. Responsive screenshots are written to `artifacts/lab-04/screenshots/` at 1440 x 1000, 820 x 1180, and 390 x 844. The flows also run axe WCAG A/AA checks, page-level horizontal-overflow checks, and browser-error assertions.
 
+Render a snapshot of the Lab 4 Project board and local Git commit graph after updating project statuses or refs:
+
+```powershell
+npm run evidence:lab4
+```
+
+These two evidence images are sourced from `gh project item-list` and `git log`; the browser Project board itself requires GitHub sign-in.
+
 The synthetic 10,000-Ticket / 50,000-Action performance smoke is excluded from the default `npm run test:server` suite so it cannot affect fixture baseline tests. Run it independently against a disposable PostgreSQL schema with `npm run test:perf:lab4`; the Lab 4 quality gate includes this isolated run.
 
 The server and E2E commands create a uniquely named PostgreSQL schema, apply the real migration history, seed test fixtures, run the tests, and remove only that temporary schema. The browser suite starts the local client and server, checks WCAG 2 A/AA and responsive overflow, and saves evidence at the authoritative desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844 viewports under `artifacts/lab-03/screenshots/`.
@@ -148,4 +156,4 @@ Use the unique initial password configured through `LAB3_SEED_INITIAL_PASSWORD` 
 
 ## Lab 4 Release Flow
 
-Lab 4 feature branches enter `lab4-staging` only through reviewed Pull Requests. After Issue #54 regression and evidence are complete, create one release Pull Request from `lab4-staging` to `main`. Run `npm run test:quality:lab4` from the integrated branch and capture passing output, screenshots, and required documentation for the submission.
+Lab 4 feature branches enter `lab4-staging` only through reviewed Pull Requests. After Issue #55 evidence is reviewed and merged into `lab4-staging`, create one release Pull Request from `lab4-staging` to `main`. Run `npm run test:quality:lab4` against the exact release candidate and record the passing output, screenshots, review history, and documentation in [`docs/lab-04/release-pr.md`](docs/lab-04/release-pr.md). Do not merge the release PR until it has peer approval and the Lab 4 Project issues are all Done.

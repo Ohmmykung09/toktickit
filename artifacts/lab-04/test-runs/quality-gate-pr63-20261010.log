@@ -1,0 +1,297 @@
+PR #63 tested HEAD: 0bcb81c063c97d0d860c4ac80fc8d7a0c7812a9e
+Working tree before run: dirty; documentation and evidence-renderer changes are uncommitted
+Uncommitted application/test implementation changes: none
+Command: npm run test:quality:lab4
+Started UTC: 2026-10-10T13:25:59.8296180+00:00
+
+
+> toktickit@0.1.0 test:quality:lab4
+> npm run test:client && npm run test:server:isolated && npm run test:perf:lab4 && npm run build && npm run test:e2e:all
+
+
+> toktickit@0.1.0 test:client
+> npm --workspace client test -- --run
+
+
+> @toktickit/client@0.1.0 test
+> vitest --run
+
+
+ RUN  v2.1.9 C:/Users/Titinan/.codex/worktrees/issue-55-release-evidence/toktickit/client
+
+ ✓ tests/lab-01/App.test.tsx (6 tests) 832ms
+ ✓ tests/lab-03/StaffTicketOperations.test.tsx (2 tests) 836ms
+   ✓ IT Staff Ticket Detail operations > opens a ticket and claims it using the authenticated staff identity 677ms
+ ✓ tests/lab-04/StaffDashboard.test.tsx (3 tests) 846ms
+   ✓ Lab 4 IT Staff Dashboard UI > loads metrics and opens an urgent Ticket through its drill-down 600ms
+ ✓ tests/lab-04/RequesterDashboard.test.tsx (4 tests) 1102ms
+   ✓ Lab 4 Requester Dashboard UI > shows authoritative metric cards and drills into a ticket 600ms
+ ✓ tests/lab-04/TicketWorkflow.test.tsx (4 tests) 1414ms
+   ✓ Lab 4 Ticket workflow UI > shows only permitted transitions and hides forbidden workflow options 594ms
+ ✓ tests/lab-03/StaffQueue.test.tsx (6 tests) 1654ms
+   ✓ IT Staff Ticket Queue > shows loading before rendering API data in table and mobile-card structures 316ms
+   ✓ IT Staff Ticket Queue > distinguishes an empty queue from filtered no-results 434ms
+   ✓ IT Staff Ticket Queue > submits filters and uses server pagination 638ms
+ ✓ tests/lab-02/AttachmentSection.test.tsx (4 tests) 1984ms
+   ✓ Attachment section > uploads a permitted file and displays metadata returned by the API 635ms
+   ✓ Attachment section > retains removed attachment metadata and its reason when the API returns 204 No Content 804ms
+ ✓ tests/lab-03/AdminUsers.test.tsx (4 tests) 3497ms
+   ✓ Administrator user management > renders allowlisted user data and creates a user 1874ms
+   ✓ Administrator user management > edits activation and role, then resets the initial password through explicit controls 1276ms
+ ✓ tests/lab-02/CreateTicket.test.tsx (3 tests) 4381ms
+   ✓ Create Ticket > submits API lookup values for the selected requester and displays the new ticket number 2204ms
+   ✓ Create Ticket > retains entered values and shows a useful error after a create request fails 1950ms
+ ✓ tests/lab-02/MyTickets.test.tsx (2 tests) 799ms
+   ✓ My Tickets and Ticket Detail > renders requester-owned API ticket data and opens its detail 755ms
+ ✓ tests/lab-03/RoleNavigation.test.tsx (3 tests) 824ms
+   ✓ Lab 3 role navigation and session boundaries > shows only destinations permitted for each authenticated role 431ms
+   ✓ Lab 3 role navigation and session boundaries > logs out and clears the authenticated shell 358ms
+ ✓ tests/lab-02/RequesterSelection.test.tsx (2 tests) 360ms
+ ✓ tests/lab-02/RequesterTicketDetail.test.tsx (1 test) 557ms
+   ✓ Requester Ticket Detail > renders the selected requester ticket detail returned by the API 554ms
+ ✓ tests/lab-04/ActionsTaken.test.tsx (4 tests) 4967ms
+   ✓ Lab 4 Actions Taken UI > renders the staff list and validates required follow-up note before create 1795ms
+   ✓ Lab 4 Actions Taken UI > creates an Action Taken and sends the authenticated idempotency header 1329ms
+   ✓ Lab 4 Actions Taken UI > disables repeat submission while a create is pending 1401ms
+   ✓ Lab 4 Actions Taken UI > cancels an Action Taken from the edit UI and hides all further edit controls 440ms
+ ✓ tests/lab-03/RequesterRegression.test.tsx (2 tests) 327ms
+ ✓ tests/lab-03/CommentsNotes.test.tsx (4 tests) 5295ms
+   ✓ Lab 3 comments, notes, and resolution UI > lets a Requester post a Public Comment and indicate apparent resolution without exposing Internal Notes 1193ms
+   ✓ Lab 3 comments, notes, and resolution UI > keeps Public Comments and Internal Notes visibly distinct for staff and posts both safely 1943ms
+   ✓ Lab 3 comments, notes, and resolution UI > reconciles a Requester comment committed before its response is lost 797ms
+   ✓ Lab 3 comments, notes, and resolution UI > reconciles a Staff Internal Note committed before its response is lost 1359ms
+ ✓ tests/lab-03/ChangePassword.test.tsx (1 test) 1791ms
+   ✓ Lab 3 mandatory password change UI > keeps protected content hidden until matching valid values succeed 1789ms
+ ✓ tests/lab-03/MessagePolicy.test.ts (2 tests) 21ms
+ ✓ tests/lab-03/Login.test.tsx (2 tests) 2252ms
+   ✓ Lab 3 login UI > shows a safe failure then opens the authenticated shell after valid login 1615ms
+   ✓ Lab 3 login UI > renders loading and backend-unavailable states 634ms
+
+ Test Files  19 passed (19)
+      Tests  59 passed (59)
+   Start at  20:26:07
+   Duration  30.27s (transform 2.36s, setup 38.52s, collect 53.88s, tests 33.74s, environment 175.49s, prepare 12.70s)
+
+
+> toktickit@0.1.0 test:server:isolated
+> node scripts/run-lab3-isolated.mjs server
+
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "toktickit", schema "lab3_quality_ba53791b0bd1412fb39e5da14339057d" at "localhost:5432"
+
+7 migrations found in prisma/migrations
+
+Applying migration `20260814144249_create_category`
+Applying migration `20260822000000_lab2_ticket_foundation`
+Applying migration `20260901000000_lab2_review_fixes`
+Applying migration `20260911000000_lab3_user_migration`
+Applying migration `20260911100000_bind_session_version`
+Applying migration `20260928000000_lab4_action_taken_foundation`
+Applying migration `20260929000000_lab4_action_taken_idempotency`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260814144249_create_category/
+    └─ migration.sql
+  └─ 20260822000000_lab2_ticket_foundation/
+    └─ migration.sql
+  └─ 20260901000000_lab2_review_fixes/
+    └─ migration.sql
+  └─ 20260911000000_lab3_user_migration/
+    └─ migration.sql
+  └─ 20260911100000_bind_session_version/
+    └─ migration.sql
+  └─ 20260928000000_lab4_action_taken_foundation/
+    └─ migration.sql
+  └─ 20260929000000_lab4_action_taken_idempotency/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+Seeded 4 categories, 7 related systems, 10 users, 8 tickets, and 7 actions. Provisioned 0 users.
+
+> @toktickit/server@0.1.0 test
+> vitest --run --no-file-parallelism
+
+
+ RUN  v2.1.9 C:/Users/Titinan/.codex/worktrees/issue-55-release-evidence/toktickit/server
+
+ ✓ tests/lab-04/actions-taken.api.test.ts (7 tests) 937ms
+   ✓ Lab 4 Actions Taken API and authorization > lets Staff create and list Actions while deriving audit identities from the session 570ms
+ ✓ tests/lab-03/admin-users.api.test.ts (10 tests) 1165ms
+ ✓ tests/lab-04/migration-recovery.integration.test.ts (2 tests) 1694ms
+   ✓ Lab 4 migration recovery > rolls back a forced failure inside the real migration and retries cleanly 675ms
+   ✓ Lab 4 migration recovery > rehearses backup restore after a committed failure and retries the migration 1017ms
+ ✓ tests/lab-03/comments-notes.api.test.ts (8 tests) 944ms
+   ✓ Lab 3 Public Comments, Internal Notes, and resolution indication > creates and returns Public Comments oldest-first with backend author and time 452ms
+ ✓ tests/lab-03/staff-operations.api.test.ts (9 tests) 1375ms
+   ✓ Lab 3 IT Staff ticket operations > enforces the complete status transition matrix through the API 723ms
+ ✓ tests/lab-03/auth.api.test.ts (6 tests) 1986ms
+ ✓ tests/lab-03/migration.integration.test.ts (5 tests) 2344ms
+   ✓ Lab 3 isolated migration and seed > applies the actual migration history to an empty schema 490ms
+   ✓ Lab 3 isolated migration and seed > migrates populated Lab 2 data without changing ownership or installing credentials 654ms
+   ✓ Lab 3 isolated migration and seed > preserves edited user and lookup state when the seed runs again 816ms
+   ✓ Lab 3 isolated migration and seed > enforces canonical email storage and canonical uniqueness in PostgreSQL 381ms
+ ✓ tests/lab-03/authorization.api.test.ts (5 tests) 673ms
+   ✓ Lab 3 authorization and Requester regression > rejects anonymous and non-Requester direct API access safely 371ms
+ ✓ tests/lab-04/migration-regression.integration.test.ts (4 tests) 2590ms
+   ✓ Lab 4 Actions Taken migration and seed > applies the complete migration history and seeds zero, one, and multiple Actions Taken 653ms
+   ✓ Lab 4 Actions Taken migration and seed > adds the foundation to populated Lab 3 data without changing legacy records 496ms
+   ✓ Lab 4 Actions Taken migration and seed > keeps user-managed values and fixture counts unchanged on repeated seed runs 813ms
+   ✓ Lab 4 Actions Taken migration and seed > preserves Action Taken audit history when a parent Ticket deletion is requested 626ms
+ ✓ tests/lab-03/staff-queue.api.test.ts (5 tests) 606ms
+   ✓ Lab 3 IT Staff Ticket Queue > searches ticket number, summary, description, requester name, and requester email 312ms
+ ✓ tests/lab-04/ticket-workflow.api.test.ts (3 tests) 479ms
+ ✓ tests/lab-02/my-tickets.api.test.ts (5 tests) 577ms
+ ↓ tests/lab-04/dashboard-performance.smoke.test.ts (1 test | 1 skipped)
+ ✓ tests/lab-02/attachments.api.test.ts (3 tests) 426ms
+ ✓ tests/lab-04/staff-dashboard.api.test.ts (3 tests) 477ms
+   ✓ Lab 4 IT Staff Dashboard API > calculates operational ownership, buckets, actions, and urgent drill-down tickets 421ms
+ ✓ tests/lab-04/requester-dashboard.api.test.ts (2 tests) 542ms
+   ✓ Lab 4 Requester Dashboard API > returns owned authoritative metrics, bounded lists, and drill-down data 504ms
+ ✓ tests/lab-02/create-ticket.api.test.ts (3 tests) 292ms
+ ✓ tests/lab-02/ticket-detail.api.test.ts (1 test) 213ms
+ ✓ tests/lab-03/message-policy.unit.test.ts (3 tests) 20ms
+ ✓ tests/lab-03/status-policy.unit.test.ts (2 tests) 4ms
+ ✓ tests/lab-03/auth-policy.unit.test.ts (2 tests) 5ms
+ ✓ tests/lab-01/app.test.ts (3 tests) 249ms
+ ✓ tests/lab-02/lookups.api.test.ts (1 test) 115ms
+ ✓ tests/lab-02/ticket-number.test.ts (2 tests) 4ms
+
+ Test Files  23 passed | 1 skipped (24)
+      Tests  94 passed | 1 skipped (95)
+   Start at  20:27:01
+   Duration  37.39s (transform 715ms, setup 0ms, collect 12.30s, tests 17.72s, environment 5ms, prepare 2.91s)
+
+
+> toktickit@0.1.0 test:perf:lab4
+> node scripts/run-lab3-isolated.mjs perf tests/lab-04/dashboard-performance.smoke.test.ts
+
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "toktickit", schema "lab3_quality_6a53d9cac98240d7a000877db6eaf7e2" at "localhost:5432"
+
+7 migrations found in prisma/migrations
+
+Applying migration `20260814144249_create_category`
+Applying migration `20260822000000_lab2_ticket_foundation`
+Applying migration `20260901000000_lab2_review_fixes`
+Applying migration `20260911000000_lab3_user_migration`
+Applying migration `20260911100000_bind_session_version`
+Applying migration `20260928000000_lab4_action_taken_foundation`
+Applying migration `20260929000000_lab4_action_taken_idempotency`
+
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.3 -> 8.0.0-rc.22                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260814144249_create_category/
+    └─ migration.sql
+  └─ 20260822000000_lab2_ticket_foundation/
+    └─ migration.sql
+  └─ 20260901000000_lab2_review_fixes/
+    └─ migration.sql
+  └─ 20260911000000_lab3_user_migration/
+    └─ migration.sql
+  └─ 20260911100000_bind_session_version/
+    └─ migration.sql
+  └─ 20260928000000_lab4_action_taken_foundation/
+    └─ migration.sql
+  └─ 20260929000000_lab4_action_taken_idempotency/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+Seeded 4 categories, 7 related systems, 10 users, 8 tickets, and 7 actions. Provisioned 0 users.
+
+> @toktickit/server@0.1.0 test
+> vitest --run --no-file-parallelism tests/lab-04/dashboard-performance.smoke.test.ts
+
+
+ RUN  v2.1.9 C:/Users/Titinan/.codex/worktrees/issue-55-release-evidence/toktickit/server
+
+stdout | tests/lab-04/dashboard-performance.smoke.test.ts > Lab 4 dashboard and Action Taken performance smoke > keeps dashboard and indexed action-list reads under 500 ms at 10k Tickets and 50k Actions
+Lab 4 performance p95: staff dashboard 133.4 ms; Action Taken list 22.7 ms; 10,000 Tickets / 50,000 Actions.
+
+ ✓ tests/lab-04/dashboard-performance.smoke.test.ts (1 test) 13206ms
+   ✓ Lab 4 dashboard and Action Taken performance smoke > keeps dashboard and indexed action-list reads under 500 ms at 10k Tickets and 50k Actions 13198ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  20:27:45
+   Duration  14.37s (transform 199ms, setup 0ms, collect 788ms, tests 13.21s, environment 0ms, prepare 152ms)
+
+
+> toktickit@0.1.0 build
+> npm --workspace client run build && npm --workspace server run build
+
+
+> @toktickit/client@0.1.0 build
+> tsc -b && vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 40 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.41 kB │ gzip:  0.27 kB
+dist/assets/index-D_6yeqCp.css  246.02 kB │ gzip: 33.90 kB
+dist/assets/index-C9Szkaxp.js   270.79 kB │ gzip: 77.52 kB
+✓ built in 2.61s
+
+> @toktickit/server@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> toktickit@0.1.0 test:e2e:all
+> node scripts/run-lab3-isolated.mjs e2e e2e/lab-02 e2e/lab-03 e2e/lab-04
+
+Prisma schema loaded from prisma\schema.prisma
+Datasource "db": PostgreSQL database "toktickit", schema "lab3_quality_e59022bf2ec84883abf24c682845fd0b" at "localhost:5432"
+
+7 migrations found in prisma/migrations
+
+Applying migration `20260814144249_create_category`
+Applying migration `20260822000000_lab2_ticket_foundation`
+Applying migration `20260901000000_lab2_review_fixes`
+Applying migration `20260911000000_lab3_user_migration`
+Applying migration `20260911100000_bind_session_version`
+Applying migration `20260928000000_lab4_action_taken_foundation`
+Applying migration `20260929000000_lab4_action_taken_idempotency`
+
+The following migration(s) have been applied:
+
+migrations/
+  └─ 20260814144249_create_category/
+    └─ migration.sql
+  └─ 20260822000000_lab2_ticket_foundation/
+    └─ migration.sql
+  └─ 20260901000000_lab2_review_fixes/
+    └─ migration.sql
+  └─ 20260911000000_lab3_user_migration/
+    └─ migration.sql
+  └─ 20260911100000_bind_session_version/
+    └─ migration.sql
+  └─ 20260928000000_lab4_action_taken_foundation/
+    └─ migration.sql
+  └─ 20260929000000_lab4_action_taken_idempotency/
+    └─ migration.sql
+
+All migrations have been successfully applied.
+Seeded 4 categories, 7 related systems, 10 users, 8 tickets, and 7 actions. Provisioned 0 users.
+[WebServer] (node:39832) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:33916) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+Error: Timed out waiting 120000ms from config.webServer.
+
+
+Finished UTC: 2026-10-10T13:30:28.0813479+00:00
+Exit code: 1

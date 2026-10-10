@@ -25,12 +25,12 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 | UI-04 | UI | AC-09, AC-10, AC-11 | Staff metrics, buckets, urgent ordering, drill-down, safe states | Exact Queue filters and no cross-role data leakage. | `client/tests/lab-04/StaffDashboard.test.tsx`, `e2e/lab-04/dashboards.spec.ts` | Passing |
 | UI-05 | Accessibility / UI style | AC-14, AC-15 | Semantic names, keyboard activation, WCAG A/AA, status/alerts, responsive layout | Axe reports no violations on tested flows; keyboard activation works; no horizontal overflow. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Passing |
 | REG-01 | Regression | AC-13, AC-16 | Lab 1–3 client/server regression after Lab 4 integration | Existing authorization, ownership, ticket number, and timestamp behavior remains green. | `npm run test:quality:lab4` | Passing |
-| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five warmups plus 30 samples per endpoint | Nearest-rank p95 <= 500 ms, bounded response, expected indexes in query plans. Observed p95: 327.7 ms dashboard / 10.6 ms Action list. Run only through the isolated perf script. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
-| E2E-01 | E2E | AC-01 to AC-07 | Staff creates, assigns, transitions, completes, cancels, edits, retries after a committed/lost response, and reviews Actions Taken | Idempotent retry leaves one Action; pending submit disables duplicate clicks; cancelled/completed Actions become immutable; resolution requires a qualifying current-cycle Action. | `e2e/lab-04/actions-taken-flow.spec.ts` | Passing |
-| E2E-02 | E2E | AC-06, AC-07 | Ticket transitions, confirmation, reopen cycle, append-only history, conflict behavior | Resolution gate and recovery are observable; history survives reopening. | `e2e/lab-04/ticket-resolution.spec.ts` | Passing |
-| E2E-03 | E2E | AC-08 to AC-11 | Requester and Staff dashboard metrics, drill-down, empty and role boundaries | Correct scoped metrics, bounded lists, exact destinations, safe states. | `e2e/lab-04/dashboards.spec.ts` | Passing |
-| A11Y-01 | Accessibility | AC-14, AC-15 | WCAG A/AA scans, semantic names, keyboard focus/activation, dialogs and status regions | No required Axe violations; keyboard activation verified. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Passing |
-| RESP-01 | Responsive | AC-14, AC-15 | Desktop/tablet/mobile captures and page-level overflow checks | Screenshots use exact required viewport dimensions with no horizontal overflow. | `e2e/lab-04/*.spec.ts` | Passing |
+| PERF-01 | Performance smoke | AC-09, AC-16 | Staff dashboard and Action list at 10,000 Tickets / 50,000 Actions; five warmups plus 30 samples per endpoint | Nearest-rank p95 <= 500 ms, bounded response, expected indexes in query plans. Aggregate-gate p95: 93.9 ms dashboard / 7.4 ms Action list. Run only through the isolated perf script. | `server/tests/lab-04/dashboard-performance.smoke.test.ts` | Passing |
+| E2E-01 | E2E | AC-01 to AC-07 | Staff creates, assigns, transitions, completes, cancels, edits, retries after a committed/lost response, and reviews Actions Taken | Idempotent retry leaves one Action; pending submit disables duplicate clicks; cancelled/completed Actions become immutable; resolution requires a qualifying current-cycle Action. | `e2e/lab-04/actions-taken-flow.spec.ts` | Not rerun: web-server startup timed out before Playwright; see raw gate log. |
+| E2E-02 | E2E | AC-06, AC-07 | Ticket transitions, confirmation, reopen cycle, append-only history, conflict behavior | Resolution gate and recovery are observable; history survives reopening. | `e2e/lab-04/ticket-resolution.spec.ts` | Not rerun: web-server startup timed out before Playwright; see raw gate log. |
+| E2E-03 | E2E | AC-08 to AC-11 | Requester and Staff dashboard metrics, drill-down, empty and role boundaries | Correct scoped metrics, bounded lists, exact destinations, safe states. | `e2e/lab-04/dashboards.spec.ts` | Not rerun: web-server startup timed out before Playwright; see raw gate log. |
+| A11Y-01 | Accessibility | AC-14, AC-15 | WCAG A/AA scans, semantic names, keyboard focus/activation, dialogs and status regions | No required Axe violations; keyboard activation verified. | `e2e/lab-04/*.spec.ts` and shared accessibility helper | Not rerun: web-server startup timed out before Playwright; see raw gate log. |
+| RESP-01 | Responsive | AC-14, AC-15 | Desktop/tablet/mobile captures and page-level overflow checks | Screenshots use exact required viewport dimensions with no horizontal overflow. | `e2e/lab-04/*.spec.ts` | Not rerun: web-server startup timed out before Playwright; see raw gate log. |
 
 ## 3. Acceptance-Criteria Traceability
 
@@ -56,18 +56,37 @@ This plan was prepared before the main Lab 4 implementation. The matrix records 
 ## 4. Final Evidence
 
 - API and integration tests run against isolated PostgreSQL schemas.
-- Client UI tests, production build, and complete Lab 2–4 Playwright regression.
-- Three Lab 4 browser workflows against the real client, server, authentication, CSRF, and database.
-- Accessibility scans and responsive evidence at desktop 1440 x 1000, tablet 820 x 1180, and mobile 390 x 844.
+- Client UI tests, isolated API/integration tests, performance smoke, and production client/server builds passed in the recorded PR #63 attempt.
+- The Lab 2–4 Playwright regression, accessibility scans, and responsive capture checks did not start in that attempt due to the port-3000 collision; see the gate log and capture-provenance note below.
 - Rendered `specification.md`, `api-spec.md`, `ui-spec.md`, and this test plan.
+- [Project board snapshot: all cards #48–#56 Done](../../artifacts/lab-04/screenshots/project-board-lab4.png).
+- [Commit-history graph snapshot](../../artifacts/lab-04/screenshots/commit-history-lab4.png).
 
 ## 5. Final Verification Commands
 
-Run the integrated regression and isolated performance gates with:
+The integrated quality gate was run on PR #63's current HEAD with documentation and the evidence renderer modified in the working tree; no application or test implementation files were modified. Its raw output is [quality-gate-pr63-20261010.log](../../artifacts/lab-04/test-runs/quality-gate-pr63-20261010.log).
+
+| Field | Recorded value |
+| --- | --- |
+| Tested HEAD | `0bcb81c063c97d0d860c4ac80fc8d7a0c7812a9e` |
+| Working tree | Dirty; documentation/evidence renderer changes present, no application/test implementation changes |
+| Command | `npm run test:quality:lab4` |
+| Started (UTC) | `2026-10-10T13:25:59.8296180+00:00` |
+| Finished (UTC) | `2026-10-10T13:30:28.0813479+00:00` |
+| Exit code | `1` — incomplete; E2E web-server startup timed out |
+
+Completed portions of that run: client 59/59 passed; isolated server 94 passed with one intentionally skipped performance test; isolated performance smoke passed at 10k Tickets/50k Actions (p95 133.4 ms dashboard / 22.7 ms Actions list); production client/server builds passed. The Lab 2–4 Playwright phase did not start: another local process was listening on `localhost:3000` and returned 404 for `/api/health`, so Playwright timed out waiting for its configured web server. Therefore the integrated gate is **not recorded as passing**, and this run is not release-candidate or `main` evidence.
+
+After the unrelated process releases port 3000, rerun the complete gate and capture a fresh log before changing the result above:
+
+Run from the repository root with `DATABASE_URL` available through `server/.env` (as required by the isolated test runner) and ports 3000/5173 free.
 
 ```powershell
-npm run test:quality:lab4
+$ErrorActionPreference = 'Stop'
+npm run test:quality:lab4 2>&1 | Tee-Object -FilePath artifacts/lab-04/test-runs/quality-gate-pr63-rerun.log
+if ($LASTEXITCODE -ne 0) { throw 'Quality gate failed; do not mark it passed.' }
 git diff --check
+if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed.' }
 ```
 
-The verified gate passed 59 client tests and 94 isolated server tests (the synthetic 10k/50k performance case is skipped in the ordinary server suite), the separate isolated performance test (1 passed; 30 samples per endpoint), production build, and all Lab 2–4 Playwright flows (10 passed). Lab 4 viewport captures use the exact dimensions listed above and have companion full-page captures.
+The currently committed viewport screenshots are not claimed to come from this failed run. Their known source revisions are listed in [`evidence-captures.md`](../../artifacts/lab-04/evidence-captures.md). Rerun `npm run test:quality:lab4` after this evidence PR merges and on the exact release candidate; a PR #63 run is not final-main evidence.
