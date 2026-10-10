@@ -1,62 +1,67 @@
-# Lab 4 Release PR Draft
+# Lab 4 Release PR Preparation
 
-Use this draft only after the Issue #55 evidence PR is reviewed and merged into `lab4-staging`. The release PR must compare `lab4-staging` → `main`; do not retarget a feature PR directly to `main`.
+Use this procedure only after the Issue #55 evidence PR (#63) is reviewed and merged into `lab4-staging`. The release PR must compare `lab4-staging` → `main`; do not retarget a feature PR directly to `main`.
 
-## Suggested title
+## Release candidate quality gate
 
-`release: integrate Lab 4 Actions Taken and dashboards`
-
-## Suggested PR body
-
-```markdown
-## Summary
-- Integrate the reviewed Lab 4 Actions Taken data model, API, lifecycle UI, and guarded Ticket resolution workflow.
-- Add role-scoped Requester and IT Staff dashboards with exact metrics and drill-down filters.
-- Include final regression, accessibility, responsive, performance, peer-review, and AI-use evidence.
-- Deliver Lab 4 to `main` only through the reviewed `lab4-staging` integration branch.
-
-## Included work
-- Specification and Test DD: #47, #56 / PR #57
-- Actions Taken migration and seed: #48 / PR #58
-- Actions API and Ticket workflow: #49, #50 / PR #59
-- Actions UI and dashboards: #51, #52, #53 / PR #60
-- Regression and E2E hardening: #54 / PR #62
-- Final evidence and release preparation: #55 / this PR
-
-## Verification
-- `npm run prisma:generate` — [result]
-- `npm run test:quality:lab4` — [client/server/performance/build/E2E result]
-- Responsive screenshots: desktop 1440x1000, tablet 820x1180, mobile 390x844.
-- Accessibility: axe WCAG 2 A/AA and keyboard/name checks — [result]
-- `git diff --check` — [result]
-- Project board: all Lab 4 issues Done — [verification link]
-
-## Review and release gate
-- Peer-reviewed on `lab4-staging`; see `docs/lab-04/reviewer.md`.
-- No direct feature-branch merge to `main`.
-- Merge only after approval and successful checks on this exact release candidate.
-```
-
-## Commands after the evidence PR is merged
+Run these commands from the repository root in PowerShell. Native executables such as `git`, `npm`, and `gh` report failures through `$LASTEXITCODE`; `$ErrorActionPreference = 'Stop'` does not stop the script for those failures. Each command below therefore checks its exit code explicitly. Do not run `gh pr create` unless every prerequisite and the complete gate pass.
 
 ```powershell
+$ErrorActionPreference = 'Stop'
+
 git fetch origin
+if ($LASTEXITCODE -ne 0) { throw 'git fetch failed; release PR was not created.' }
 git switch lab4-staging
+if ($LASTEXITCODE -ne 0) { throw 'Could not switch to lab4-staging; release PR was not created.' }
 git pull --ff-only origin lab4-staging
+if ($LASTEXITCODE -ne 0) { throw 'Could not fast-forward lab4-staging; release PR was not created.' }
+
+$releaseSha = (git rev-parse HEAD).Trim()
+if ($LASTEXITCODE -ne 0) { throw 'Could not capture release candidate SHA.' }
+$dirty = git status --porcelain
+if ($LASTEXITCODE -ne 0) { throw 'Could not inspect working tree.' }
+if ($dirty) { throw 'Working tree is not clean; do not claim release-candidate evidence.' }
+
 npm ci
+if ($LASTEXITCODE -ne 0) { throw 'npm ci failed; release PR was not created.' }
 npm run prisma:generate
-npm run test:quality:lab4
+if ($LASTEXITCODE -ne 0) { throw 'Prisma generate failed; release PR was not created.' }
+
+$runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmssZ')
+$log = "artifacts/lab-04/test-runs/quality-gate-release-$runId.log"
+New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
+$started = [DateTimeOffset]::UtcNow
+@("Release candidate SHA: $releaseSha", 'Working tree before gate: clean', 'Command: npm run test:quality:lab4', "Started UTC: $($started.ToString('o'))", '') | Set-Content -LiteralPath $log
+npm run test:quality:lab4 2>&1 | Tee-Object -FilePath $log -Append
+$gateExit = $LASTEXITCODE
+$finished = [DateTimeOffset]::UtcNow
+@('', "Finished UTC: $($finished.ToString('o'))", "Exit code: $gateExit") | Add-Content -LiteralPath $log
+if ($gateExit -ne 0) { throw "Quality gate failed with exit code $gateExit; release PR was not created. See $log" }
+
 git diff --check
-gh pr create --repo Ohmmykung09/toktickit --base main --head lab4-staging --title "release: integrate Lab 4 Actions Taken and dashboards" --body-file docs/lab-04/release-pr-body.md
+if ($LASTEXITCODE -ne 0) { throw 'git diff --check failed; release PR was not created.' }
+
+# Fill the placeholders in release-pr-body.md with this run's SHA, log path,
+# timestamps, and results. Refuse to create a PR while any placeholder remains.
+if (Select-String -LiteralPath 'docs/lab-04/release-pr-body.md' -Pattern '\[FILL IN') {
+  throw 'Complete the release PR body placeholders before creating the PR.'
+}
+
+gh pr create --repo Ohmmykung09/toktickit --draft --base main --head lab4-staging --title 'release: integrate Lab 4 Actions Taken and dashboards' --body-file docs/lab-04/release-pr-body.md
+if ($LASTEXITCODE -ne 0) { throw 'gh pr create failed.' }
 ```
 
-The current branch's test results are recorded in `tests.md` only after running the gate here. Rerun the same gate after the evidence PR is merged; a pass on a pre-merge commit is not release-candidate evidence.
+The gate log must be committed or otherwise linked as an artifact on the release PR, and the PR body must identify the exact tested SHA, clean-tree status, command, UTC start/end, exit code, and test results. The run above is the release-candidate gate; results from PR #63 or an earlier staging commit are not substitutes.
+
+## Single-source PR body
+
+[`release-pr-body.md`](release-pr-body.md) is the only release PR body source. Fill in its verification fields after the exact candidate passes. Do not keep a second copy of the body in this instruction file.
 
 ## Evidence index
 
 - [Reviewer findings, responses, and approvals](reviewer.md)
 - [Selected prompts and reflection](ai-use.md)
-- [Test plan and final gate](tests.md)
+- [Test plan and evidence for this PR](tests.md)
 - [Requester dashboard desktop screenshot](../../artifacts/lab-04/screenshots/dashboards/requester-dashboard-desktop.png)
 - [Staff dashboard desktop screenshot](../../artifacts/lab-04/screenshots/dashboards/staff-dashboard-desktop.png)
 - [Actions Taken desktop screenshot](../../artifacts/lab-04/screenshots/actions-taken/staff-ticket-actions-desktop.png)

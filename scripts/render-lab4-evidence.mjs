@@ -25,10 +25,16 @@ if (issues.length !== 9) {
   throw new Error(`Expected 9 Lab 4 project issues (#48–#56), received ${issues.length}.`);
 }
 
+const statuses = ['Backlog', 'Specified', 'Started', 'PR Review', 'Fixing', 'Done'];
+const unexpectedStatuses = issues.filter(({ status }) => !statuses.includes(status));
+if (unexpectedStatuses.length > 0) {
+  const details = unexpectedStatuses.map(({ number, status }) => `#${number}: ${status}`).join(', ');
+  throw new Error(`Unsupported Project status; refusing to omit issue cards from the evidence image: ${details}`);
+}
+
 const escape = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[character]);
-const statuses = ['Backlog', 'Specified', 'Started', 'PR Review', 'Fixing', 'Done'];
 const capturedAt = new Date().toISOString();
 const boardColumns = statuses.map((status) => {
   const cards = issues.filter((issue) => issue.status === status);
