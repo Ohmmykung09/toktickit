@@ -1,11 +1,11 @@
 import { expect, test } from 'playwright/test';
+import { signIn } from '../lab-03/evidence.js';
+import { e2eUsers } from '../lab-03/fixture-data.js';
 
 test('a requester creates, finds, opens, and manages an attachment on an owned ticket', async ({ page }) => {
   const summary = `E2E Wi-Fi issue ${Date.now()}`;
 
-  await page.goto('/');
-  await page.getByLabel('Development Requester').selectOption({ index: 1 });
-  await page.getByRole('button', { name: 'Continue' }).click();
+  await signIn(page, e2eUsers.requester.email);
   await page.getByRole('button', { name: 'Open Create Ticket' }).click();
 
   await page.getByLabel(/category/i).selectOption({ index: 1 });

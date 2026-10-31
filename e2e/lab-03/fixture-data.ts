@@ -11,6 +11,11 @@ export const e2eUsers = {
 } as const;
 
 export const staffTicketNumber = 'TKT-E2E-LAB3-STAFF';
+export const actionTicketNumber = 'TKT-E2E-LAB4-ACTIONS';
+export const resolutionTicketNumber = 'TKT-E2E-LAB4-RESOLUTION';
+export const requesterWaitingTicketNumber = 'TKT-E2E-LAB4-WAITING';
+export const requesterResolvedTicketNumber = 'TKT-E2E-LAB4-RESOLVED';
+export const staffUrgentTicketNumber = 'TKT-E2E-LAB4-URGENT';
 export const managedUserEmail = 'lab3.e2e.managed@example.test';
 export const e2eUserEmailPrefix = 'lab3.e2e.';
 export const e2eTicketPrefix = 'TKT-E2E-';

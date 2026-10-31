@@ -9,7 +9,8 @@ async function main() {
   const result = await seedDatabase(prisma, initialPassword);
   console.log(
     `Seeded ${result.categories} categories, ${result.relatedSystems} related systems, ` +
-      `${result.users} users, and ${result.tickets} tickets. Provisioned ${result.provisionedUsers} users.`
+      `${result.users} users, ${result.tickets} tickets, and ${result.actionsTaken} actions. ` +
+      `Provisioned ${result.provisionedUsers} users.`
   );
 }
 

@@ -8,6 +8,8 @@ build/
 coverage/
 test-results/
 playwright-report/
+tmp/
+*.docx
 server/uploads/
 .vscode/
 *.tsbuildinfo

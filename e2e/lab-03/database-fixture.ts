@@ -3,10 +3,15 @@ import dotenv from 'dotenv';
 import { hashPassword } from '../../server/src/auth-policy.js';
 import {
   e2ePassword,
+  actionTicketNumber,
   e2eTicketPrefix,
   e2eUserEmailPrefix,
   e2eUsers,
-  staffTicketNumber
+  requesterResolvedTicketNumber,
+  requesterWaitingTicketNumber,
+  resolutionTicketNumber,
+  staffTicketNumber,
+  staffUrgentTicketNumber
 } from './fixture-data.js';
 
 dotenv.config({ path: 'server/.env' });
@@ -25,14 +30,20 @@ async function cleanFixtureData(prisma: PrismaClient) {
   });
   const userIds = users.map(({ id }) => id);
 
-  await prisma.ticket.deleteMany({
+  const fixtureTickets = await prisma.ticket.findMany({
     where: {
       OR: [
         { ticketNumber: { startsWith: e2eTicketPrefix } },
         ...(userIds.length ? [{ requesterId: { in: userIds } }] : [])
       ]
-    }
+    },
+    select: { id: true }
   });
+  const fixtureTicketIds = fixtureTickets.map(({ id }) => id);
+  if (fixtureTicketIds.length) {
+    await prisma.actionTaken.deleteMany({ where: { ticketId: { in: fixtureTicketIds } } });
+    await prisma.ticket.deleteMany({ where: { id: { in: fixtureTicketIds } } });
+  }
 
   if (userIds.length) {
     await prisma.publicComment.deleteMany({ where: { authorId: { in: userIds } } });
@@ -79,20 +90,51 @@ export async function prepareDatabaseFixture() {
       create: { name: 'Campus Wi-Fi', isActive: true }
     });
     const requester = createdUsers.get(e2eUsers.requester.email);
-    if (!requester) throw new Error('The E2E requester fixture was not created.');
+    const staff = createdUsers.get(e2eUsers.staff.email);
+    if (!requester || !staff) throw new Error('The E2E actor fixtures were not created.');
 
-    await prisma.ticket.create({
+    const now = new Date();
+    const ticketFixtures = [
+      { ticketNumber: staffTicketNumber, summary: 'Lab 3 E2E staff workflow', status: 'NEW' as const, ownerId: null, itPriority: 'MEDIUM' as const },
+      { ticketNumber: actionTicketNumber, summary: 'Lab 4 E2E Actions Taken workflow', status: 'OPEN' as const, ownerId: staff.id, itPriority: 'HIGH' as const },
+      { ticketNumber: resolutionTicketNumber, summary: 'Lab 4 E2E Ticket resolution workflow', status: 'OPEN' as const, ownerId: staff.id, itPriority: 'MEDIUM' as const },
+      { ticketNumber: requesterWaitingTicketNumber, summary: 'Lab 4 E2E requester waiting ticket', status: 'WAITING_FOR_REQUESTER' as const, ownerId: staff.id, itPriority: 'LOW' as const },
+      { ticketNumber: requesterResolvedTicketNumber, summary: 'Lab 4 E2E requester resolved ticket', status: 'RESOLVED' as const, ownerId: staff.id, itPriority: 'LOW' as const, resolvedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      { ticketNumber: staffUrgentTicketNumber, summary: 'Lab 4 E2E urgent unassigned ticket', status: 'NEW' as const, ownerId: null, itPriority: 'CRITICAL' as const }
+    ];
+
+    const createdTickets = new Map<string, { id: number }>();
+    for (const [index, fixture] of ticketFixtures.entries()) {
+      const created = await prisma.ticket.create({
+        data: {
+          ...fixture,
+          idempotencyKey: `00000000-0000-4000-8000-${String(index + 3400).padStart(12, '0')}`,
+          requesterId: requester.id,
+          categoryId: category.id,
+          relatedSystemId: relatedSystem.id,
+          description: `Deterministic browser fixture for ${fixture.summary}.`,
+          requestedPriority: 'HIGH',
+          updatedAt: now
+        },
+        select: { id: true }
+      });
+      createdTickets.set(fixture.ticketNumber, created);
+    }
+
+    const waitingTicket = createdTickets.get(requesterWaitingTicketNumber);
+    if (!waitingTicket) throw new Error('The Lab 4 requester ticket fixture was not created.');
+    await prisma.actionTaken.create({
       data: {
-        ticketNumber: staffTicketNumber,
-        idempotencyKey: '00000000-0000-4000-8000-000000003400',
-        requesterId: requester.id,
-        categoryId: category.id,
-        relatedSystemId: relatedSystem.id,
-        summary: 'Lab 3 E2E staff workflow',
-        description: 'A deterministic ticket for claim, priority, status, comment, and note evidence.',
-        requestedPriority: 'HIGH',
-        itPriority: 'MEDIUM',
-        status: 'NEW'
+        ticketId: waitingTicket.id,
+        actionDateTime: now,
+        description: 'Reviewed the requester connection report.',
+        result: 'A follow-up confirmation is needed from the requester.',
+        status: 'WAITING_FOR_REQUESTER',
+        assigneeId: staff.id,
+        createdById: staff.id,
+        performedById: staff.id,
+        followUpRequired: true,
+        followUpNote: 'Confirm whether the connection remains stable.'
       }
     });
   } finally {

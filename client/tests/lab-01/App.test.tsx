@@ -147,7 +147,8 @@ describe('TokTickIT foundation UI', () => {
             );
           }, 100);
         })
-    );
+    )
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 1, name: 'Network' }]), { status: 200 }));
 
     renderAuthenticated(<App />);
 
@@ -156,6 +157,7 @@ describe('TokTickIT foundation UI', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       /loading system status/i
     );
+    expect(await screen.findByText(/toktickit api is online/i)).toBeInTheDocument();
   });
 
   it('displays a useful error message when the backend is unavailable', async () => {
